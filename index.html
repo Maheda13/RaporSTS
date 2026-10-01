@@ -1,726 +1,278 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>eRapor DAFI</title>
-    
-    <!-- Libraries -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <style>
-        :root {
-            --primary-color: #B06161;
-            --primary-hover: #8a4b4b;
-            --bg-color: #F2EEE5;
-            --sidebar-bg: #34395e;
-        }
-        body { font-family: 'Poppins', sans-serif; background-color: var(--bg-color); }
-        .bg-sidebar { background-color: var(--sidebar-bg); }
-        
-        /* Navigasi */
-        .nav-item { color: #a0a0a0; transition: all 0.3s; cursor: pointer; border-left: 3px solid transparent; }
-        .nav-item:hover { color: #fff; background-color: rgba(255,255,255,0.1); }
-        .nav-item.active-nav { color: #fff; background-color: rgba(255,255,255,0.1); font-weight: 600; border-left: 3px solid #6777ef; }
-        
-        /* Loader */
-        .loader {
-            border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-color); border-radius: 50%;
-            width: 50px; height: 50px; animation: spin 1s linear infinite;
-            position: fixed; top: 50%; left: 50%; margin-left: -25px; margin-top: -25px; 
-            z-index: 9999; display: none; box-shadow: 0 0 15px rgba(0,0,0,0.2);
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        /* Input Table */
-        table input { text-align: center; min-width: 60px; border: 1px solid #e5e7eb; border-radius: 0.25rem; padding: 0.25rem; outline: none; }
-        table input:focus { border-color: var(--primary-color); background-color: #fff5f5; }
-        
-        .hidden { display: none !important; }
-        
-        /* General Inputs */
-        .input-field { display: block; width: 100%; border-radius: 0.375rem; border: 1px solid #d1d5db; background-color: #ffffff; color: #1f2937; padding: 0.5rem 1rem; height: 45px; outline: none; transition: 0.2s; }
-        .input-field:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(176, 97, 97, 0.2); }
-        .btn-primary { background-color: var(--primary-color); color: white; font-weight: 500; padding: 0.5rem 1.5rem; border-radius: 0.375rem; transition: 0.2s; min-height: 45px;}
-        .btn-primary:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
-        .card-shadow { background-color: white; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #f3f4f6; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uji CORS — eRapor DAFI (Tahap 0)</title>
+<style>
+  :root { --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --ink:#1f2937; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background:#f4f4f5; color:var(--ink); margin:0; padding:2rem 1rem; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  .sub { color:#6b7280; font-size:.9rem; margin-bottom:1.5rem; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+          padding:1.25rem; margin-bottom:1rem; }
+  label { display:block; font-weight:600; font-size:.85rem; margin-bottom:.4rem; }
+  input { width:100%; padding:.7rem .9rem; border:1px solid #d1d5db; border-radius:8px;
+          font-size:.95rem; font-family: ui-monospace, monospace; }
+  input:focus { outline:2px solid #b06161; outline-offset:1px; border-color:#b06161; }
+  button { margin-top:.85rem; width:100%; padding:.8rem; border:0; border-radius:8px;
+           background:#b06161; color:#fff; font-weight:700; font-size:1rem; cursor:pointer; }
+  button:hover { background:#8a4b4b; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:.6rem; }
+  .row button { flex:1; margin-top:.6rem; background:#374151; }
+  .row button:hover { background:#1f2937; }
+  .verdict { border-radius:12px; padding:1.1rem 1.25rem; margin-bottom:1rem;
+             border:1px solid; font-weight:600; display:none; }
+  .verdict.show { display:block; }
+  .verdict.pass { background:#f0fdf4; border-color:#bbf7d0; color:#14532d; }
+  .verdict.fail { background:#fef2f2; border-color:#fecaca; color:#7f1d1d; }
+  .verdict .big { font-size:1.15rem; margin-bottom:.35rem; }
+  .test { border:1px solid #e5e7eb; border-radius:10px; padding:.85rem 1rem;
+          margin-bottom:.6rem; background:#fafafa; }
+  .test .name { font-weight:600; font-size:.9rem; margin-bottom:.35rem; }
+  .badge { display:inline-block; font-size:.7rem; font-weight:800; letter-spacing:.05em;
+           padding:.15rem .5rem; border-radius:999px; text-transform:uppercase; }
+  .badge.pass { background:#dcfce7; color:#166534; }
+  .badge.fail { background:#fee2e2; color:#991b1b; }
+  .badge.skip { background:#f3f4f6; color:#6b7280; }
+  pre { background:#111827; color:#a7f3d0; padding:.75rem; border-radius:8px;
+        font-size:.75rem; overflow-x:auto; margin:.5rem 0 0; max-height:220px; }
+  pre.err { color:#fecaca; }
+  .note { font-size:.8rem; color:#6b7280; line-height:1.5; }
+  code { background:#f3f4f6; padding:.1rem .35rem; border-radius:4px; font-size:.85em; }
+  .meta { font-size:.78rem; color:#6b7280; margin-top:1rem; word-break:break-all; }
+</style>
 </head>
-<body class="antialiased text-gray-800 overflow-hidden">
+<body>
+<div class="wrap">
+  <h1>🔍 Uji CORS — Gerbang Tahap 0</h1>
+  <p class="sub">Menentukan apakah frontend GitHub Pages boleh memanggil Apps Script langsung, atau perlu Cloudflare Worker.</p>
 
-    <div class="loader" id="loader"></div>
+  <div class="card">
+    <label for="api-url">URL Web App Apps Script (akhiran <code>/exec</code>)</label>
+    <input id="api-url" type="url" placeholder="https://script.google.com/macros/s/AKfy.../exec" autocomplete="off">
+    <button id="btn-run">Jalankan Semua Uji</button>
+  </div>
 
-    <!-- LOGIN SCREEN -->
-    <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-xl shadow-xl w-full max-w-md border border-gray-200">
-            <div class="text-center mb-8">
-                <h2 class="text-3xl font-bold text-[#B06161]">eRapor DAFI</h2>
-                <p class="text-gray-500 font-medium mt-1">Sistem Penilaian Terpadu</p>
-            </div>
-            
-            <div id="login-error" class="hidden bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded mb-6 text-sm font-bold"></div>
-            
-            <div class="space-y-6">
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-1">Username</label>
-                    <input type="text" id="username-input" class="input-field" placeholder="Masukkan username">
-                </div>
-                <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-1">Password</label>
-                    <div class="relative">
-                        <input type="password" id="password-input" class="input-field pr-10" placeholder="Masukkan password">
-                        <button type="button" onclick="toggleLoginPassword()" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-[#B06161]">
-                            <i id="login-eye-icon" class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-                <button onclick="handleLogin()" class="w-full btn-primary text-lg mt-2 font-bold shadow-md">
-                    MASUK
-                </button>
-            </div>
-        </div>
-    </div>
+  <div id="verdict" class="verdict" role="status" aria-live="polite"></div>
 
-    <!-- APP SCREEN -->
-    <div id="app-view" class="flex h-screen overflow-hidden hidden relative">
-        <div id="mobile-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-20 hidden md:hidden"></div>
+  <div id="results"></div>
 
-        <!-- SIDEBAR -->
-        <aside id="sidebar" class="w-64 bg-sidebar text-white flex-shrink-0 flex flex-col transition-transform duration-300 transform -translate-x-full md:translate-x-0 fixed md:relative z-30 h-full shadow-xl">
-            
-            <div class="h-16 flex items-center justify-center font-bold text-xl tracking-wider border-b border-gray-700 bg-opacity-20 shadow-sm bg-[#2c3049]">
-                <i class="fas fa-graduation-cap mr-2 text-[#B06161]"></i> eRAPOR DAFI
-            </div>
-            
-            <div class="overflow-y-auto flex-1 py-6 px-3">
-                
-                <div class="text-[10px] font-bold text-gray-400 uppercase mb-3 px-3 tracking-wider">Menu Utama</div>
-                <ul class="space-y-1" id="sidebar-menu"></ul>
+  <div class="card">
+    <p class="note" style="margin:0">
+      <strong>Yang diuji:</strong> apakah JavaScript di halaman ini bisa <em>membaca</em> isi respons
+      JSON dari Apps Script lintas origin. Jika hasilnya <em>CORS block</em> / <em>Failed to fetch</em>,
+      berarti GitHub Pages tidak bisa memanggil Apps Script langsung dan arsitektur harus
+      menggunakan proxy (Cloudflare Worker).
+      <br><br>
+      <strong>Penting:</strong> halaman ini harus sudah ter-host di GitHub Pages
+      (bukan <code>file:///</code>) agar origin-nya benar.
+    </p>
+    <p class="meta" id="meta"></p>
+  </div>
+</div>
 
-                <div id="menu-admin" class="hidden mt-6">
-                    <div class="text-[10px] font-bold text-gray-400 uppercase mb-3 px-3 tracking-wider">Administrator</div>
-                    <ul class="space-y-1">
-                        <li class="mb-1">
-                            <a href="#" id="link-p-monitor" onclick="nav('p-monitor')" class="flex items-center px-4 py-3 nav-item rounded-lg transition text-gray-300">
-                                <i class="fas fa-chart-pie w-6 mr-3 text-lg text-center"></i>
-                                <span class="font-medium">Pantau Kelengkapan</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-                
-            </div>
-            
-            <div class="p-4 border-t border-gray-700 bg-[#2c3049]">
-                <button onclick="handleLogout()" class="flex items-center text-gray-300 hover:text-white transition w-full px-2 py-2 rounded hover:bg-white/10">
-                    <i class="fas fa-sign-out-alt mr-3"></i> Logout
-                </button>
-            </div>
-        </aside>
+<script>
+(function () {
+  'use strict';
 
-        <!-- MAIN CONTENT -->
-        <div class="flex-1 flex flex-col h-screen overflow-hidden w-full bg-[#F2EEE5]">
-            <!-- HEADER -->
-            <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10 border-b border-gray-200">
-                <div class="flex items-center">
-                    <button onclick="toggleSidebar()" class="text-[#B06161] text-2xl hover:bg-gray-100 p-2 rounded-md md:hidden mr-3 transition"><i class="fas fa-bars"></i></button>
-                    <h2 class="text-xl font-bold text-gray-800" id="page-title">Dashboard</h2>
-                </div>
-                <div class="flex items-center space-x-3 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-100 transition cursor-pointer" onclick="nav('p-pass')">
-                    <div class="text-right hidden sm:block">
-                        <div class="text-sm font-bold text-gray-800" id="display-username">User</div>
-                        <div class="text-[10px] text-white bg-[#B06161] px-2 py-0.5 rounded-full font-bold inline-block" id="display-role">Role</div>
-                    </div>
-                    <img src="https://ui-avatars.com/api/?name=User&background=B06161&color=fff" id="user-avatar" class="h-9 w-9 rounded-full border-2 border-white shadow-sm">
-                </div>
-            </header>
+  const $ = (id) => document.getElementById(id);
+  const urlInput = $('api-url');
+  const runBtn = $('btn-run');
+  const verdict = $('verdict');
+  const results = $('results');
 
-            <main class="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-8" id="main-content">
-                
-                <!-- DASHBOARD -->
-                <div id="p-dashboard" class="page-section hidden">
-                    <div class="bg-gradient-to-r from-[#B06161] to-[#8a4b4b] rounded-xl shadow-lg p-8 mb-8 text-white relative overflow-hidden">
-                        <div class="relative z-10">
-                            <h2 class="text-3xl font-bold mb-2">Selamat Datang, <span id="dash-greeting-name">Guru</span>!</h2>
-                            <p class="opacity-90 text-lg">Sistem Rapor Digital Terintegrasi SMP-MA DAFI.</p>
-                        </div>
-                        <i class="fas fa-chart-pie absolute -right-6 -bottom-6 text-9xl opacity-10 transform rotate-12"></i>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500"><p class="text-gray-500 text-sm font-bold uppercase">Total Siswa</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-siswa">0</h3></div>
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500"><p class="text-gray-500 text-sm font-bold uppercase">Total Kelas</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-kelas">0</h3></div>
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500"><p class="text-gray-500 text-sm font-bold uppercase">Mata Pelajaran</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-mapel">0</h3></div>
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500"><p class="text-gray-500 text-sm font-bold uppercase">Data Nilai Input</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-nilai">0</h3></div>
-                    </div>
-                </div>
+  // Simpan endpoint terakhir supaya tidak perlu ditempel ulang.
+  const savedUrl = localStorage.getItem('corsTestUrl');
+  if (savedUrl) urlInput.value = savedUrl;
 
-                <!-- CAPAIAN -->
-                <div id="p-capaian" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Capaian Kompetensi</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div><label class="text-sm font-bold text-gray-600 uppercase mb-1 block">Kelas</label><select id="c-kelas" class="input-field bg-gray-50"></select></div>
-                            <div><label class="text-sm font-bold text-gray-600 uppercase mb-1 block">Mata Pelajaran</label><select id="c-mapel" class="input-field bg-gray-50"></select></div>
-                        </div>
-                        <div class="mb-6">
-                            <div class="flex justify-between items-center mb-2">
-                                <label class="text-sm font-bold text-gray-700">Deskripsi Capaian</label>
-                                <span id="c-count" class="text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-500">0/25 kata</span>
-                            </div>
-                            <textarea id="c-text" class="w-full rounded-md border border-gray-300 p-3 bg-gray-50 focus:bg-white focus:border-[#B06161] focus:ring-2 focus:ring-[#B06161]/20 outline-none" rows="4"></textarea>
-                        </div>
-                        <div class="flex justify-end"><button onclick="saveCapaian()" class="btn-primary shadow-md"><i class="fas fa-save mr-2"></i> Simpan Data</button></div>
-                        <div id="c-status" class="mt-2 text-right text-sm font-bold h-5"></div>
-                    </div>
-                </div>
+  $('meta').textContent =
+    'Origin halaman ini: ' + location.origin + ' | ' +
+    'Protocol: ' + location.protocol + ' | UA: ' + navigator.userAgent.slice(0, 60);
 
-                <!-- NILAI -->
-                <div id="p-nilai" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Nilai Akademik</h4>
-                        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div><label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Kelas</label><select id="n-kelas" class="input-field"></select></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Mapel</label><select id="n-mapel" class="input-field"></select></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Semester</label><select id="n-sem" class="input-field"><option value="">-Pilih-</option><option>Ganjil</option><option>Genap</option></select></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Tahun</label><select id="n-thn" class="input-field"><option value="">-Pilih-</option><option>2025/2026</option><option>2026/2027</option><option>2027/2028</option></select></div>
-                            </div>
-                        </div>
-                        
-                        <!-- Tabs -->
-                        <div class="flex space-x-2 mb-6 border-b border-gray-200 pb-1">
-                            <button onclick="swView('m')" id="btn-m" class="px-6 py-2 text-sm font-bold rounded-t-lg bg-[#B06161] text-white shadow-sm border border-[#B06161]">Input Manual</button>
-                            <button onclick="swView('u')" id="btn-u" class="px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-t-lg border border-transparent">Upload Excel</button>
-                        </div>
-                        
-                        <div id="view-manual">
-                            <div id="n-table-area" class="overflow-x-auto border border-gray-200 rounded-lg mb-6 bg-white shadow-inner max-h-[500px]"><div class="p-10 text-center text-gray-400">Pilih filter di atas untuk memuat data.</div></div>
-                            <div class="flex justify-end items-center"><span id="n-status-m" class="mr-3 text-sm font-bold"></span><button onclick="saveNilaiManual()" class="btn-primary shadow-md"><i class="fas fa-cloud-upload-alt mr-2"></i> Simpan Nilai Server</button></div>
-                        </div>
-                        <div id="view-upload" class="hidden">
-                            <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-5 rounded-md mb-6 text-sm">
-                                <strong>Format Kolom Excel Wajib (Mulai A1):</strong><br>
-                                <code>1.NIS</code> | <code>2.Nama</code> | <code>3.UH1</code> | <code>4.UH2</code> | <code>5.UH3</code> | <code>6.UH4</code> | <code>7.UH5</code> | <code>8.STS</code> | <code>9.SAS</code>
-                            </div>
-                            <div class="flex flex-col md:flex-row items-center gap-4">
-                                <input type="file" id="n-file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#B06161] file:text-white hover:file:bg-[#9a5454] border border-gray-300 rounded-lg p-2 bg-white cursor-pointer" accept=".xlsx, .xls"/>
-                                <button onclick="uploadNilai()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-lg shadow whitespace-nowrap transition"><i class="fas fa-upload mr-2"></i> Upload & Simpan</button>
-                            </div>
-                            <div id="n-status-u" class="mt-3 text-sm font-bold text-right h-5"></div>
-                        </div>
-                    </div>
-                </div>
+  function addTest(name, desc) {
+    const el = document.createElement('div');
+    el.className = 'test';
+    el.innerHTML =
+      '<div class="name">' + esc(name) + ' <span class="badge skip" data-badge>belum jalan</span></div>' +
+      '<div class="note">' + desc + '</div>' +
+      '<pre data-log hidden></pre>';
+    results.appendChild(el);
+    return el;
+  }
 
-                <!-- ABSENSI -->
-                <div id="p-absen" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Absensi</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Kelas</label><select id="a-kelas" class="input-field bg-gray-50"></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="a-sem" class="input-field bg-gray-50"><option value="">-Pilih-</option><option>Ganjil</option><option>Genap</option></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="a-thn" class="input-field bg-gray-50"><option value="">-Pilih-</option><option>2025/2026</option><option>2026/2027</option><option>2027/2028</option></select></div>
-                        </div>
-                        <div id="a-table" class="mb-6 overflow-x-auto border rounded-lg"></div>
-                        <div class="flex justify-end"><span id="a-status" class="mr-3 text-sm font-bold self-center"></span><button onclick="saveAbsen()" class="btn-primary shadow"><i class="fas fa-save mr-2"></i> Simpan Absensi</button></div>
-                    </div>
-                </div>
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
 
-                <!-- EKSTRA -->
-                <div id="p-ekstra" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Ekstrakurikuler</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Kelas</label><select id="e-kelas" class="input-field bg-gray-50"></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="e-sem" class="input-field bg-gray-50"><option value="">-Pilih-</option><option>Ganjil</option><option>Genap</option></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="e-thn" class="input-field bg-gray-50"><option value="">-Pilih-</option><option>2025/2026</option><option>2026/2027</option><option>2027/2028</option></select></div>
-                        </div>
-                        <div id="e-table" class="mb-6 overflow-x-auto border rounded-lg"></div>
-                        <div class="flex justify-end"><span id="e-status" class="mr-3 text-sm font-bold self-center"></span><button onclick="saveEkstra()" class="btn-primary shadow"><i class="fas fa-save mr-2"></i> Simpan Ekstra</button></div>
-                    </div>
-                </div>
+  function pass(el, msg) {
+    const b = el.querySelector('[data-badge]');
+    b.className = 'badge pass'; b.textContent = 'LULUS';
+    const log = el.querySelector('[data-log]');
+    log.hidden = false; log.className = ''; log.textContent = msg;
+  }
 
-                <!-- STATUS -->
-                <div id="p-status" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Papan Pemantau Status Input</h4>
-                        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div><label class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="s-sem" class="input-field"><option value="">-Pilih-</option><option>Ganjil</option><option>Genap</option></select></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="s-thn" class="input-field"><option value="">-Pilih-</option><option>2025/2026</option><option>2026/2027</option><option>2027/2028</option></select></div>
-                            </div>
-                            <button onclick="loadStatus()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow"><i class="fas fa-search mr-2"></i> Tampilkan Laporan</button>
-                        </div>
-                        <div id="s-area" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-                    </div>
-                </div>
+  function fail(el, msg) {
+    const b = el.querySelector('[data-badge]');
+    b.className = 'badge fail'; b.textContent = 'GAGAL';
+    const log = el.querySelector('[data-log]');
+    log.hidden = false; log.className = 'err'; log.textContent = msg;
+  }
 
-                <!-- CETAK RAPOR -->
-                <div id="p-cetak" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Cetak Rapor & PDF</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-5 rounded-xl border border-gray-200">
-                            <div><label class="text-xs font-bold text-gray-500 uppercase mb-1">Kelas</label><select id="r-kelas" class="input-field bg-white"></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase mb-1">Siswa</label><select id="r-siswa" class="input-field bg-white"></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase mb-1">Jenis Rapor</label><select id="r-jenis" class="input-field bg-white"><option>Tengah Semester</option><option>Akhir Semester</option></select></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase mb-1">Semester</label><select id="r-sem" class="input-field bg-white"><option value="">-Pilih-</option><option>Ganjil</option><option>Genap</option></select></div>
-                            <div class="md:col-span-4"><label class="text-xs font-bold text-gray-500 uppercase mb-1">Tahun Ajaran</label><select id="r-thn" class="input-field bg-white"><option value="">-Pilih-</option><option>2025/2026</option><option>2026/2027</option><option>2027/2028</option></select></div>
-                        </div>
-                        <button onclick="previewRapor()" class="w-full bg-orange-500 text-white font-bold py-3 rounded-lg hover:bg-orange-600 shadow-md transition transform active:scale-[0.99]"><i class="fas fa-desktop mr-2"></i> Ambil Preview Rapor</button>
-                        
-                        <!-- Area render rapor sebelum cetak PDF -->
-                        <div id="r-preview" class="hidden mt-8 border-t border-gray-200 pt-6"></div>
-                    </div>
-                </div>
-
-                <div id="p-monitor" class="page-section hidden">
-                    <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Pantau Kelengkapan Nilai (Leger)</h4>
-                        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div><label class="text-xs font-bold text-gray-500 uppercase">Kelas</label><select id="m-kelas" class="input-field bg-white"></select></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="m-sem" class="input-field bg-white"><option value="">-Pilih-</option><option>Ganjil</option><option>Genap</option></select></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="m-thn" class="input-field bg-white"><option value="">-Pilih-</option><option>2025/2026</option><option>2026/2027</option><option>2027/2028</option></select></div>
-                            </div>
-                            <button onclick="loadMonitoring()" class="mt-4 w-full md:w-auto bg-[#B06161] hover:bg-[#8a4b4b] text-white font-bold py-2.5 px-6 rounded-lg transition shadow"><i class="fas fa-search mr-2"></i> Tampilkan Leger</button>
-                        </div>
-                        <div class="overflow-x-auto border rounded-lg shadow-sm">
-                            <table class="w-full text-sm text-left border-collapse">
-                                <thead id="m-table-head" class="bg-gray-200 text-gray-800 font-bold text-xs uppercase tracking-wider"></thead>
-                                <tbody id="m-table-body" class="divide-y divide-gray-200 bg-white">
-                                    <tr><td class="p-8 text-center text-gray-400" colspan="100%">Pilih filter untuk memuat data.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- PASSWORD -->
-                <div id="p-pass" class="page-section hidden">
-                    <div class="card-shadow max-w-md mx-auto">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4 text-center">Pengaturan Akun</h4>
-                        <div id="p7-msg" class="mb-4"></div>
-                        <div class="space-y-4">
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Password Lama</label><input type="password" id="pw-old" class="input-field bg-gray-50"></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Password Baru</label><input type="password" id="pw-new" class="input-field bg-gray-50"></div>
-                            <div><label class="text-xs font-bold text-gray-500 uppercase">Konfirmasi</label><input type="password" id="pw-conf" class="input-field bg-gray-50"></div>
-                            <button onclick="changePw()" class="w-full btn-primary mt-4 shadow-md"><i class="fas fa-key mr-2"></i> Simpan Password Baru</button>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
-
-    <script>
-        // GLOBAL VARS
-        let DATA = {}, USER = {}, CURRENT_RAPOR_DATA = null;
-        
-        // HELPERS
-        const spin = (on) => { document.getElementById('loader').style.display = on ? 'block' : 'none'; };
-        const msg = (id, txt, ok) => {
-            const el = document.getElementById(id);
-            el.innerHTML = '<span class="' + (ok ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200') + ' font-bold text-sm px-3 py-1.5 rounded border block text-center shadow-sm">' + txt + '</span>';
-            setTimeout(() => el.innerHTML='', 4000);
-        };
-
-        // INIT & LOGIN
-        window.onload = function() {
-            const stored = localStorage.getItem('rUser');
-            if(stored) { USER = JSON.parse(stored); enterApp(); }
-            else document.getElementById('login-view').classList.remove('hidden');
-        };
-
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('-translate-x-full');
-            document.getElementById('mobile-overlay').classList.toggle('hidden');
-        }
-        
-        function toggleLoginPassword() {
-            const input = document.getElementById('password-input');
-            const icon = document.getElementById('login-eye-icon');
-            if (input.type === 'password') { input.type = 'text'; icon.classList.replace('fa-eye', 'fa-eye-slash'); } 
-            else { input.type = 'password'; icon.classList.replace('fa-eye-slash', 'fa-eye'); }
-        }
-
-        function handleLogin() {
-            const u = document.getElementById('username-input').value;
-            const p = document.getElementById('password-input').value;
-            if(!u || !p) {
-                document.getElementById('login-error').classList.remove('hidden');
-                document.getElementById('login-error').textContent = 'Isi semua kolom.'; return;
-            }
-            spin(true);
-            google.script.run.withSuccessHandler(res => {
-                spin(false);
-                if(res) { 
-                    USER = res; localStorage.setItem('rUser', JSON.stringify(USER)); enterApp(); 
-                }
-                else { 
-                    document.getElementById('login-error').classList.remove('hidden'); 
-                    document.getElementById('login-error').textContent = 'Username/Password Salah'; 
-                }
-            }).withFailureHandler(e => { spin(false); alert('Koneksi Error: ' + e); }).authenticateUser(u, p);
-        }
-
-        function handleLogout() { localStorage.removeItem('rUser'); location.reload(); }
-        
-        function enterApp() {
-            document.getElementById('login-view').classList.add('hidden');
-            document.getElementById('app-view').classList.remove('hidden');
-            
-            const nameToShow = USER.fullName || USER.username;
-            document.getElementById('display-username').textContent = nameToShow;
-            document.getElementById('dash-greeting-name').textContent = nameToShow;
-            document.getElementById('display-role').textContent = USER.role;
-            document.getElementById('user-avatar').src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(nameToShow) + '&background=B06161&color=fff';
-            
-            buildMenu(USER.role);
-
-            // --- TAMBAHAN UNTUK MEMUNCULKAN MENU ADMIN ---
-            if (USER.role === 'Admin') {
-                const menuAdmin = document.getElementById('menu-admin');
-                if (menuAdmin) {
-                    menuAdmin.classList.remove('hidden');
-                }
-            }
-            // ---------------------------------------------
-
-            loadInit();
-        }
-
-        // NAV
-        function buildMenu(role) {
-            const m = document.getElementById('sidebar-menu'); m.innerHTML = '';
-            const add = (id, i, t) => {
-                m.innerHTML += '<li class="mb-1"><a href="#" id="link-' + id + '" onclick="nav(\'' + id + '\')" class="flex items-center px-4 py-3 nav-item rounded-lg transition"><i class="' + i + ' w-6 mr-3 text-lg text-center"></i><span class="font-medium">' + t + '</span></a></li>';
-            };
-            add('p-dashboard','fas fa-home','Dashboard');
-            if(role === 'Guru Mapel') {
-                add('p-capaian','fas fa-book','Input Capaian'); add('p-nilai','far fa-file-alt','Input Nilai'); add('p-status','fas fa-chart-line','Status Nilai');
-            } else {
-                add('p-absen','fas fa-user-clock','Absensi'); add('p-ekstra','fas fa-running','Ekstrakurikuler'); add('p-cetak','fas fa-print','Cetak Rapor');
-            }
-            nav('p-dashboard');
-        }
-
-        function nav(id) {
-            document.querySelectorAll('.page-section').forEach(el => el.classList.add('hidden'));
-            document.getElementById(id).classList.remove('hidden');
-            document.getElementById('page-title').textContent = id.replace('p-','').replace(/-/g,' ').toUpperCase();
-            
-            document.querySelectorAll('.nav-item').forEach(el => { el.classList.remove('active-nav', 'text-white', 'bg-white/10'); el.classList.add('text-gray-300'); });
-            const link = document.getElementById('link-'+id);
-            if(link) { link.classList.add('active-nav', 'text-white', 'bg-white/10'); link.classList.remove('text-gray-300'); }
-            
-            if(window.innerWidth < 768) { document.getElementById('sidebar').classList.add('-translate-x-full'); document.getElementById('mobile-overlay').classList.add('hidden'); }
-        }
-
-        // DATA & DROPDOWN
-        function loadInit() { 
-            google.script.run.withSuccessHandler(d => { DATA = d; popDrops(); loadDash(); }).getInitialData(USER.username, USER.role, USER.waliKelasOf); 
-        }
-        function loadDash() { 
-            google.script.run.withSuccessHandler(s => { 
-                document.getElementById('dash-siswa').textContent = s.siswa; 
-                document.getElementById('dash-kelas').textContent = s.kelas; 
-                document.getElementById('dash-mapel').textContent = s.mapel; 
-                document.getElementById('dash-nilai').textContent = s.nilai; 
-            }).getDashboardStats(); 
-        }
-
-        function popDrops() {
-            let kOpt = '<option value="">-Pilih-</option>';
-            if(USER.role === 'Wali Kelas' && USER.waliKelasOf) {
-                kOpt = '<option value="' + USER.waliKelasOf + '" selected>' + USER.waliKelasOf + '</option>';
-            } else {
-                kOpt += DATA.kelas.map(k=>'<option>' + k + '</option>').join('');
-            }
-
-            ['c-kelas','n-kelas','a-kelas','e-kelas','r-kelas', 'm-kelas'].forEach(id => {
-                const el = document.getElementById(id);
-                if(el) { 
-                    el.innerHTML = kOpt; 
-                    if(USER.role==='Wali Kelas') { el.disabled = true; setTimeout(()=>$(el).trigger('change'), 200); }
-                    el.onchange = function() {
-                        const val = this.value;
-                        if(id==='c-kelas') updMapel(val, 'c-mapel');
-                        if(id==='n-kelas') { updMapel(val, 'n-mapel'); if(!document.getElementById('view-manual').classList.contains('hidden')) checkAndLoadNilai(); }
-                        if(id==='r-kelas') loadSiswa(val);
-                    };
-                }
-            });
-        }
-        function updMapel(k, tid) {
-            const el = document.getElementById(tid);
-            if(!k) { el.innerHTML = '<option value="">-Pilih Kelas-</option>'; return; }
-            const rel = DATA.mapel.filter(m => m.kelas === k || m.kelas === 'ALL');
-            const unq = []; const seen = new Set();
-            rel.forEach(m=>{ if(!seen.has(m.kode)){seen.add(m.kode); unq.push(m);} });
-            el.innerHTML = '<option value="">-Pilih-</option>' + unq.map(m=>'<option value="' + m.kode + '">' + m.nama + '</option>').join('');
-        }
-
-        // CAPAIAN
-        $('#c-mapel').change(function(){ const m=this.value, k=$('#c-kelas').val(); if(m&&k) { spin(true); google.script.run.withSuccessHandler(t=>{ $('#c-text').val(t||'').trigger('input'); spin(false); }).getCapaian(m,k); }});
-        $('#c-text').on('input', function(){ const c=this.value.trim()===''?0:this.value.trim().split(/\s+/).length; const count = document.getElementById('c-count'); count.textContent = c+'/25 kata'; count.className = c>25 ? "text-xs font-medium px-2 py-1 rounded bg-red-100 text-red-600" : "text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-500"; });
-        function saveCapaian(){ spin(true); google.script.run.withSuccessHandler(r=>{msg('c-status',r,true);spin(false);}).saveCapaian($('#c-mapel').val(),$('#c-kelas').val(),$('#c-text').val(),USER.username); }
-
-        // NILAI
-        function swView(m) {
-            document.getElementById('view-manual').classList.toggle('hidden', m!=='m');
-            document.getElementById('view-upload').classList.toggle('hidden', m!=='u');
-            const btnM = document.getElementById('btn-m'), btnU = document.getElementById('btn-u');
-            if(m==='m') { btnM.className = 'px-6 py-2 text-sm font-bold rounded-t-lg bg-[#B06161] text-white shadow-sm border border-[#B06161]'; btnU.className = 'px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-t-lg border border-transparent'; }
-            else { btnU.className = 'px-6 py-2 text-sm font-bold rounded-t-lg bg-[#B06161] text-white shadow-sm border border-[#B06161]'; btnM.className = 'px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-t-lg border border-transparent'; }
-        }
-        function checkAndLoadNilai() {
-            const k=$('#n-kelas').val(), m=$('#n-mapel').val(), s=$('#n-sem').val(), t=$('#n-thn').val();
-            if(k&&m&&s&&t && !document.getElementById('view-manual').classList.contains('hidden')) loadNilaiTable(k,m,s,t);
-        }
-        $('#n-mapel, #n-sem, #n-thn').change(checkAndLoadNilai);
-        
-        function loadNilaiTable(k,m,s,t) {
-            spin(true); 
-            document.getElementById('n-table-area').innerHTML = '<div class="p-10 text-center text-gray-500 font-medium animate-pulse">Menarik data dari server...</div>';
-            google.script.run.withSuccessHandler(d => {
-                if(!d || !d.length) { 
-                    document.getElementById('n-table-area').innerHTML = '<div class="p-8 text-center text-red-500 font-bold"><i class="fas fa-exclamation-circle mr-2"></i> Tidak ada data siswa di kelas ini.</div>'; 
-                    spin(false); return; 
-                }
-                let h = '<table class="min-w-full divide-y divide-gray-200 border text-sm text-center"><thead class="bg-gray-100 text-gray-600"><tr><th rowspan="2" class="px-4 text-left w-1/4 sticky left-0 bg-gray-100 z-10 border-r border-b">Nama Siswa</th><th colspan="5" class="border-b py-2">Ulangan Harian</th><th rowspan="2" class="border-l border-b bg-blue-50 w-24">STS</th><th rowspan="2" class="border-l border-b bg-green-50 w-24">SAS</th></tr><tr><th class="py-1">1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody class="bg-white divide-y">';
-                d.forEach(r => {
-                    h += '<tr data-nis="' + r.nis + '"><td class="px-4 py-2 text-left font-medium sticky left-0 bg-white border-r whitespace-nowrap">' + r.nama + '<br><span class="text-[10px] text-gray-400 font-normal">' + r.nis + '</span></td>';
-                    [1,2,3,4,5].forEach(i => {
-                        let val = r['uh'+i] !== undefined ? r['uh'+i] : '';
-                        h += '<td class="p-1"><input type="number" class="w-full bg-transparent border rounded py-1.5 uh' + i + ' outline-none focus:bg-red-50 focus:border-red-300 transition" value="' + val + '" placeholder="-" min="0" max="100"></td>';
-                    });
-                    let stsVal = r.sts !== undefined ? r.sts : '';
-                    let sasVal = r.sas !== undefined ? r.sas : '';
-                    h += '<td class="p-1 border-l bg-blue-50/50"><input type="number" class="w-full bg-transparent border border-blue-200 rounded py-1.5 font-bold text-blue-700 sts outline-none focus:bg-white" value="' + stsVal + '" min="0" max="100"></td>';
-                    h += '<td class="p-1 border-l bg-green-50/50"><input type="number" class="w-full bg-transparent border border-green-200 rounded py-1.5 font-bold text-green-700 sas outline-none focus:bg-white" value="' + sasVal + '" min="0" max="100"></td></tr>';
-                });
-                document.getElementById('n-table-area').innerHTML = h + '</tbody></table>'; 
-                spin(false);
-            }).getDataNilaiInput(k,m,s,t);
-        }
-        function getP2(){ const k=$('#n-kelas').val(), m=$('#n-mapel').val(), s=$('#n-sem').val(), t=$('#n-thn').val(), mn=$('#n-mapel option:selected').text(); if(!k||!m||!s||!t){alert('Lengkapi Filter Dropdown!');return null;} return {k,m,mn,s,t}; }
-        
-        function saveNilaiManual(){
-            const d=getP2(); if(!d) return; if(!confirm('Simpan nilai untuk ' + d.mn + '?')) return;
-            const dat=[];
-            document.querySelectorAll('#n-table-area tr[data-nis]').forEach(r => {
-                const getV = (cls) => r.querySelector('.'+cls).value;
-                dat.push({nis:r.getAttribute('data-nis'), kodeMapel:d.m, sem:d.s, tahun:d.t, uh1:getV('uh1'), uh2:getV('uh2'), uh3:getV('uh3'), uh4:getV('uh4'), uh5:getV('uh5'), sts:getV('sts'), sas:getV('sas')});
-            });
-            spin(true); google.script.run.withSuccessHandler(r=>{msg('n-status-m',r,true);spin(false); loadDash();}).saveNilaiSiswa(dat,USER.username);
-        }
-        function uploadNilai(){
-            const d=getP2(); if(!d) return; const f=document.getElementById('n-file').files[0]; if(!f) return alert('Pilih File Excel!');
-            if(!confirm('Upload nilai Excel untuk ' + d.mn + '?')) return; spin(true);
-            const r=new FileReader();
-            r.onload=e=>{
-                const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-                const j=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
-                const dat=j.slice(1).map(x=>({nis:x[0], kodeMapel:d.m, sem:d.s, tahun:d.t, uh1:x[2], uh2:x[3], uh3:x[4], uh4:x[5], uh5:x[6], sts:x[7], sas:x[8]})).filter(x=>x.nis && x.nis !== undefined);
-                google.script.run.withSuccessHandler(r=>{msg('n-status-u',r,true);spin(false); loadDash();}).saveNilaiSiswa(dat,USER.username);
-            }; r.readAsArrayBuffer(f);
-        }
-
-        // ABSENSI
-        function loadAbsen(){
-            const k=$('#a-kelas').val(), s=$('#a-sem').val(), t=$('#a-thn').val();
-            if(k&&s&&t) { 
-                spin(true); 
-                google.script.run.withSuccessHandler(d => {
-                    let h = '<table class="w-full text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-bold border-b"><tr><th class="px-4 py-3">Nama Siswa</th><th class="text-center w-24">Sakit</th><th class="text-center w-24">Izin</th><th class="text-center w-24">Alpha</th></tr></thead><tbody class="divide-y bg-white">';
-                    d.forEach(r => { 
-                        h += '<tr data-n="' + r.nis + '" class="hover:bg-gray-50"><td class="px-4 py-2 font-medium">' + r.nama + '</td><td class="p-1"><input type="number" class="w-full text-center border rounded py-1.5 s outline-none focus:border-red-400" value="' + r.sakit + '" min="0"></td><td class="p-1"><input type="number" class="w-full text-center border rounded py-1.5 i outline-none focus:border-red-400" value="' + r.izin + '" min="0"></td><td class="p-1"><input type="number" class="w-full text-center border rounded py-1.5 a outline-none focus:border-red-400" value="' + r.alpha + '" min="0"></td></tr>'; 
-                    });
-                    document.getElementById('a-table').innerHTML = h + '</tbody></table>'; 
-                    spin(false);
-                }).getAbsensiSiswa(k,s,t); 
-            }
-        }
-        $('#a-kelas,#a-sem,#a-thn').change(loadAbsen);
-        function saveAbsen(){
-            const d=[]; document.querySelectorAll('#a-table tr[data-n]').forEach(r=>{ d.push({nis:r.getAttribute('data-n'), sakit:r.querySelector('.s').value, izin:r.querySelector('.i').value, alpha:r.querySelector('.a').value}); });
-            spin(true); google.script.run.withSuccessHandler(r=>{msg('a-status',r,true);spin(false)}).saveAbsensiSiswa(d,$('#a-sem').val(),$('#a-thn').val(),USER.username);
-        }
-
-        // EKSTRA
-        function loadEkstra(){
-            const k=$('#e-kelas').val(); if(!k) return; spin(true);
-            const opts = DATA.ekstrakurikuler.map(e => '<option value="' + e[0] + '">' + e[1] + '</option>').join('');
-            google.script.run.withSuccessHandler(d => {
-                let h = '<table class="w-full text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-bold border-b"><tr><th class="px-4 py-3">Nama Siswa</th><th>Pilihan Ekstra 1</th><th class="w-24 text-center">Nilai</th><th>Pilihan Ekstra 2</th><th class="w-24 text-center">Nilai</th></tr></thead><tbody class="divide-y bg-white">';
-                d.forEach(r => { 
-                    h += '<tr data-n="' + r.nis + '" class="hover:bg-gray-50"><td class="px-4 py-2 font-medium">' + r.nama + '</td><td class="p-1"><select class="w-full border rounded py-1.5 px-2 outline-none e1"><option value="">-</option>' + opts + '</select></td><td class="p-1"><select class="w-full text-center border rounded py-1.5 outline-none v1 font-bold text-blue-700"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td><td class="p-1"><select class="w-full border rounded py-1.5 px-2 outline-none e2"><option value="">-</option>' + opts + '</select></td><td class="p-1"><select class="w-full text-center border rounded py-1.5 outline-none v2 font-bold text-blue-700"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td></tr>'; 
-                });
-                document.getElementById('e-table').innerHTML = h + '</tbody></table>'; 
-                spin(false);
-            }).getSiswaByKelas(k);
-        }
-        $('#e-kelas').change(loadEkstra);
-        function saveEkstra(){
-            const d=[]; document.querySelectorAll('#e-table tr[data-n]').forEach(r=>{ const n=r.getAttribute('data-n'), e1=r.querySelector('.e1').value, v1=r.querySelector('.v1').value, e2=r.querySelector('.e2').value, v2=r.querySelector('.v2').value; if(e1&&v1) d.push({nis:n,kodeEkstra:e1,nilai:v1}); if(e2&&v2) d.push({nis:n,kodeEkstra:e2,nilai:v2}); });
-            spin(true); google.script.run.withSuccessHandler(r=>{msg('e-status',r,true);spin(false)}).saveNilaiEkstra(d,$('#e-sem').val(),$('#e-thn').val(),USER.username);
-        }
-
-        // STATUS
-        function loadStatus(){
-            const s=$('#s-sem').val(), t=$('#s-thn').val(); if(!s||!t) return alert('Pilih Filter Semester & Tahun'); spin(true);
-            google.script.run.withSuccessHandler(d=>{
-                const a=document.getElementById('s-area'); 
-                if(!Object.keys(d).length){
-                    a.innerHTML='<p class="col-span-2 text-center text-gray-500 py-4">Data tidak ditemukan.</p>';
-                    spin(false);return;
-                } 
-                let h='';
-                Object.keys(d).sort().forEach(k => { 
-                    h += '<div class="bg-white rounded-lg border border-gray-200 shadow-sm mb-4 overflow-hidden"><div class="bg-gray-50 px-4 py-3 font-bold border-b text-gray-700 border-l-4 border-l-[#B06161]">Kelas ' + k + '</div><ul class="divide-y divide-gray-100">'; 
-                    d[k].forEach(x => {
-                        let badgeClass = x.status == 'Lengkap' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-                        h += '<li class="px-4 py-2.5 flex justify-between items-center text-sm"><span class="font-medium text-gray-600">' + x.mapel + '</span><span class="' + badgeClass + ' text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">' + x.status + '</span></li>';
-                    }); 
-                    h += '</ul></div>'; 
-                }); 
-                a.innerHTML=h; spin(false);
-            }).getUploadStatus(s,t);
-        }
-
-        // CETAK
-        function loadSiswa(k){ spin(true); google.script.run.withSuccessHandler(s=>{document.getElementById('r-siswa').innerHTML=s.map(x=>'<option value="' + x.nis + '">' + x.nama + '</option>').join('');spin(false)}).getSiswaByKelas(k); }
-        
-        function previewRapor(){
-            const nis=$('#r-siswa').val(), s=$('#r-sem').val(), t=$('#r-thn').val(), j=$('#r-jenis').val(); if(!nis||!s||!t) return alert('Lengkapi Semua Filter Dropdown!'); spin(true);
-            google.script.run.withSuccessHandler(jsonStr=>{ 
-                if(jsonStr.startsWith('Err')){alert(jsonStr);spin(false);return;} 
-                CURRENT_RAPOR_DATA = JSON.parse(jsonStr); 
-                const d=CURRENT_RAPOR_DATA;
-                
-                let tbodyHtml = '';
-                d.nilai.forEach(n => {
-                    tbodyHtml += '<tr><td class="p-3 font-medium text-gray-800">' + n.mapel + '</td><td class="p-3 text-center font-bold text-lg text-[#B06161]">' + n.nilai + '</td><td class="p-3 text-xs text-gray-600 leading-relaxed">' + n.capaian + '</td></tr>';
-                });
-
-                let html = '<div class="mb-4 p-5 bg-blue-50/50 border border-blue-200 rounded-xl flex justify-between items-center"><div><h5 class="font-bold text-blue-900 text-lg">' + d.siswa.nama + '</h5><p class="text-sm text-blue-600 mt-1 font-medium"><i class="fas fa-id-card mr-1"></i> NIS: ' + d.siswa.nis + ' <span class="mx-2">|</span> <i class="fas fa-door-open mr-1"></i> Kelas: ' + d.siswa.kelas + '</p></div><div class="text-right text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-blue-100 shadow-sm"><p class="font-bold text-gray-800 text-sm">' + d.meta.sem + '</p><p>' + d.meta.thn + '</p></div></div><table class="w-full text-sm border border-gray-200 mb-6 bg-white rounded-lg overflow-hidden shadow-sm"><thead class="bg-gray-100 border-b border-gray-200 text-gray-700"><tr><th class="p-3 text-left">Mata Pelajaran</th><th class="p-3 text-center w-24">Nilai Akhir</th><th class="p-3 text-left">Deskripsi Capaian</th></tr></thead><tbody class="divide-y divide-gray-100">' + tbodyHtml + '</tbody></table><div class="mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center justify-between"><div class="flex items-center"><input type="checkbox" id="r-ttd" class="w-5 h-5 text-[#B06161] bg-white border-gray-300 rounded focus:ring-[#B06161] mr-3 cursor-pointer"><label for="r-ttd" class="font-bold text-sm text-gray-700 cursor-pointer select-none">Tampilkan Tanda Tangan Wali Kelas (' + d.waliKelas + ')</label></div></div>';
-                
-                // Tombol Cetak 1 Siswa
-                html += '<button class="w-full bg-[#B06161] hover:bg-[#8a4b4b] text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-[0.99] flex justify-center items-center text-lg" onclick="doPrint()"><i class="fas fa-file-pdf mr-2"></i> Buat & Buka PDF Rapor (' + d.siswa.nama + ')</button>';
-                
-                // Tambahan: Tombol Cetak Massal 1 Kelas
-                html += '<button class="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-[0.99] flex justify-center items-center text-lg" onclick="bulkPrint()"><i class="fas fa-copy mr-2"></i> Cetak Semua Rapor Kelas (' + d.siswa.kelas + ') & Buka Folder</button>';
-                
-                document.getElementById('r-preview').innerHTML = html;
-                document.getElementById('r-preview').classList.remove('hidden'); spin(false);
-            }).getRaportData(nis,s,t,j);
-        }
-
-        // Fungsi Cetak 1 Siswa
-        function doPrint(){ 
-            const withSig=document.getElementById('r-ttd').checked; 
-            spin(true); 
-            google.script.run.withSuccessHandler(u=>{spin(false);window.open(u)}).generatePdf(JSON.stringify(CURRENT_RAPOR_DATA), withSig); 
-        }
-
-        // Tambahan: Fungsi Cetak Semua Siswa di Kelas (Massal)
-        function bulkPrint() {
-            const k = $('#r-kelas').val(), s = $('#r-sem').val(), t = $('#r-thn').val(), j = $('#r-jenis').val();
-            if(!k || !s || !t) return alert('Lengkapi filter kelas, semester, dan tahun!');
-            const withSig = document.getElementById('r-ttd').checked;
-
-            if(!confirm("Proses cetak seluruh siswa kelas " + k + " akan memakan waktu. Anda yakin ingin melanjutkan?")) return;
-
-            spin(true);
-            google.script.run.withSuccessHandler(url => {
-                spin(false);
-                if(url.startsWith('Error')) {
-                    alert(url);
-                } else {
-                    alert("Berhasil! Semua PDF telah dibuat. Folder penyimpanan akan dibuka.");
-                    window.open(url, '_blank');
-                }
-            }).withFailureHandler(e => {
-                spin(false);
-                alert("Gagal memproses cetak massal: " + e);
-            }).generateAllPdf(k, s, t, j, withSig);
-        }
-
-        function changePw(){ const o=$('#pw-old').val(), n=$('#pw-new').val(), c=$('#pw-conf').val(); if(!o||!n||!c)return msg('p7-msg','Isi semua kolom',0); if(n!=c)return msg('p7-msg','Konfirmasi password tidak cocok',0); spin(true); google.script.run.withSuccessHandler(r=>{msg('p7-msg',r,!r.startsWith('Err'));spin(false);if(!r.startsWith('Err'))document.querySelectorAll('#p-pass input').forEach(i=>i.value='');}).changePassword(USER.username,o,n); }
-    
- // Fungsi untuk memuat data monitoring
- function loadMonitoring() {
-    const k = $('#m-kelas').val(), s = $('#m-sem').val(), t = $('#m-thn').val();
-    if(!k || !s || !t) return alert("Pilih kelas, semester, dan tahun!");
-
-    spin(true);
-    google.script.run.withSuccessHandler(jsonStr => {
-        spin(false);
-        if(jsonStr.startsWith("Error")) return alert(jsonStr);
-        
-        const data = JSON.parse(jsonStr);
-        const codes = data.codes; // Daftar kode mapel
-        const names = data.names; // Kamus Nama lengkap
-        const siswa = data.siswa;
-        
-        // --- HEADER TABEL ---
-        let thead = `<tr>
-            <th class="p-3 border min-w-[80px]">NIS</th>
-            <th class="p-3 border min-w-[200px] sticky left-0 bg-gray-200 z-10 shadow-md">Nama Siswa</th>`;
-        
-        // Tampilkan KODE di header, tapi NAMA LENGKAP di atribut title (tooltip)
-        codes.forEach(c => { 
-            const namaLengkap = names[c] || c;
-            thead += `<th class="p-3 border text-center whitespace-nowrap cursor-help" title="${namaLengkap}">${c}</th>`; 
-        });
-        
-        thead += `
-            <th class="p-3 border text-center bg-yellow-200 text-yellow-800">S</th>
-            <th class="p-3 border text-center bg-blue-200 text-blue-800">I</th>
-            <th class="p-3 border text-center bg-red-200 text-red-800">A</th>
-            <th class="p-3 border min-w-[200px]">Ekstrakurikuler</th></tr>`;
-        document.getElementById('m-table-head').innerHTML = thead;
-
-        // --- ISI TABEL ---
-        let tbody = '';
-        siswa.forEach(s => {
-            tbody += `<tr class="hover:bg-blue-50">
-                <td class="p-3 border text-center">${s.nis}</td>
-                <td class="p-3 border font-bold text-gray-800 sticky left-0 bg-white z-10 shadow-md">${s.nama}</td>`;
-            
-            // Looping berdasarkan KODE mapel
-            codes.forEach(c => {
-                const nilai = s.nilai[c];
-                if (!nilai) {
-                    tbody += `<td class="p-3 border text-center text-red-400 font-bold text-xs"><i class="fas fa-times"></i></td>`;
-                } else {
-                    tbody += `<td class="p-3 border text-center font-medium">${nilai}</td>`;
-                }
-            });
-
-            tbody += `
-                <td class="p-3 border text-center font-bold bg-yellow-50/50">${s.absen.s}</td>
-                <td class="p-3 border text-center font-bold bg-blue-50/50">${s.absen.i}</td>
-                <td class="p-3 border text-center font-bold bg-red-50/50">${s.absen.a}</td>
-                <td class="p-3 border text-xs">${s.ekskul}</td></tr>`;
-        });
-        document.getElementById('m-table-body').innerHTML = tbody;
-    }).getMonitoringData(k, s, t);
+  async function runTests() {
+    const url = urlInput.value.trim();
+    if (!url) { alert('Tempel dulu URL /exec Apps Script-nya.'); return; }
+    if (!/^https:\/\/script\.google\.com\//.test(url)) {
+      if (!confirm('URL tidak diawali https://script.google.com/ — tetap lanjut?')) return;
     }
-// Tambahan: Update fungsi login agar menampilkan menu Admin
-// Cari fungsi SuccessHandler saat login (authenticateUser), lalu tambahkan ini:
-function onLoginSuccess(user) {
-    USER = user;
-    if(user.role === 'Admin') {
-        document.getElementById('menu-admin').classList.remove('hidden');
+    localStorage.setItem('corsTestUrl', url);
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Menguji…';
+    results.innerHTML = '';
+    verdict.className = 'verdict';
+    verdict.innerHTML = '';
+
+    const outcomes = [];
+    const record = (el, ok, msg) => { outcomes.push(ok); ok ? pass(el, msg) : fail(el, msg); };
+
+    // ---- Uji 1: GET simple request ----
+    const t1 = addTest('Uji 1 — GET (simple request)',
+      'Content-Type tidak dikirim → tidak ada preflight. Ini kasus paling mungkin lolos.');
+    try {
+      const r = await fetch(url + '?action=ping&origin=' + encodeURIComponent(location.origin));
+      const txt = await r.text();
+      let j = null;
+      try { j = JSON.parse(txt); } catch (_) {}
+      if (!j || j.ok !== true) {
+        record(t1, false, 'HTTP ' + r.status + '\nRespons bukan envelope JSON yang diharapkan:\n' + txt.slice(0, 400));
+      } else {
+        record(t1, true, 'HTTP ' + r.status + ' — JSON terbaca.\n' + JSON.stringify(j.data, null, 2));
+      }
+    } catch (e) {
+      record(t1, false, 'DIBLOKIR CORS / gagal fetch:\n' + (e && e.message ? e.message : String(e)) +
+        '\n\nArtinya browser menolak respons lintas origin.');
     }
-    // ... sisa kode login Anda ...
-}   
-    
-    </script>
+
+    // ---- Uji 2: POST text/plain (tanpa preflight) ----
+    const t2 = addTest('Uji 2 — POST text/plain (envelope + token di body)',
+      'Content-Type text/plain = CORS-safelisted → tidak memicu preflight. Pola yang akan dipakai produksi.');
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        // Sengaja text/plain, BUKAN application/json (yang akan memicu preflight OPTIONS).
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({
+          action: 'echo',
+          token: 'tok_'.padEnd(32, 'x'), // token di body, bukan header Authorization
+          payload: { from: location.origin, hello: 'dunia' }
+        })
+      });
+      const txt = await r.text();
+      let j = null;
+      try { j = JSON.parse(txt); } catch (_) {}
+      if (!j || j.ok !== true) {
+        record(t2, false, 'HTTP ' + r.status + '\nRespons:\n' + txt.slice(0, 400));
+      } else {
+        record(t2, true, 'HTTP ' + r.status + ' — JSON terbaca.\n' + JSON.stringify(j.data, null, 2));
+      }
+    } catch (e) {
+      record(t2, false, 'DIBLOKIR CORS / gagal fetch:\n' + (e && e.message ? e.message : String(e)));
+    }
+
+    // ---- Uji 3: POST application/json (SENYAJA memicu preflight) ----
+    // Uji ini DIPERKIRAKAN GAGAL — tujuannya memastikan kita tahu pasti
+    // bahwa preflight memang tidak didukung, sehingga produksi tidak boleh memakainya.
+    const t3 = addTest('Uji 3 — POST application/json (sengaja memicu preflight)',
+      'Uji pembanding: DIPERKIRAKAN GAGAL. Jika gagal, kita tahu pasti production harus memakai text/plain.');
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'echo' })
+      });
+      const txt = await r.text();
+      record(t3, true, 'Ternyata preflight lolos juga (HTTP ' + r.status + ').');
+    } catch (e) {
+      record(t3, false, 'PREDIKSI TERKONFIRMASI — preflight diblokir:\n' +
+        (e && e.message ? e.message : String(e)) +
+        '\n\n→ Production wajib pakai POST text/plain, tanpa header Authorization.');
+    }
+
+    // ---- Uji 4: header Authorization (sengaja memicu preflight) ----
+    const t4 = addTest('Uji 4 — POST dengan header Authorization (sengaja memicu preflight)',
+      'Uji pembanding: memastikan token HARUS dikirim di body, bukan di header.');
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+          'Authorization': 'Bearer tok_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+        },
+        body: JSON.stringify({ action: 'auth' })
+      });
+      record(t4, true, 'Ternyata Authorization header lolos (HTTP ' + r.status + ').');
+    } catch (e) {
+      record(t4, false, 'PREDIKSI TERKONFIRMASI — header Authorization memicu preflight yang diblokir:\n' +
+        (e && e.message ? e.message : String(e)) +
+        '\n\n→ Token harus dikirim di dalam body envelope.');
+    }
+
+    // ---- Uji 5: endpoint auth simulasi (bukti alur login jalan) ----
+    const t5 = addTest('Uji 5 — Endpoint auth simulasi (via POST text/plain)',
+      'Membuktikan alur login/reset-password yang berbasis body envelope bisa berfungsi.');
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ action: 'auth', token: 'tok_'.padEnd(32, 'x') })
+      });
+      const txt = await r.text();
+      let j = null;
+      try { j = JSON.parse(txt); } catch (_) {}
+      if (!j || j.ok !== true) {
+        record(t5, false, 'HTTP ' + r.status + '\nRespons:\n' + txt.slice(0, 400));
+      } else {
+        record(t5, true, 'HTTP ' + r.status + ' — JSON terbaca.\n' + JSON.stringify(j.data, null, 2));
+      }
+    } catch (e) {
+      record(t5, false, 'DIBLOKIR CORS / gagal fetch:\n' + (e && e.message ? e.message : String(e)));
+    }
+
+    // ---- Verdict ----
+    // Uji 1, 2, dan 5 = WAJIB LULUS agar arsitektur "langsung" layak.
+    // Uji 3 & 4 = pembanding, kegagalan justru diharapkan.
+    const required = [outcomes[0], outcomes[1], outcomes[4]];
+    const directOk = required.every(Boolean);
+
+    verdict.classList.add('show', directOk ? 'pass' : 'fail');
+    if (directOk) {
+      verdict.innerHTML =
+        '<div class="big">✅ LULUS — Frontend GitHub Pages BISA memanggil Apps Script langsung.</div>' +
+        '<div class="note">Pola <code>POST text/plain</code> dengan token di body bekerja. ' +
+        'Frontend boleh di-host di GitHub Pages tanpa proxy. Lanjut ke Tahap 1.</div>';
+    } else {
+      verdict.innerHTML =
+        '<div class="big">❌ GAGAL — GitHub Pages TIDAK BISA memanggil Apps Script langsung.</div>' +
+        '<div class="note">Respons lintas origin diblokir browser. Arsitektur harus memakai ' +
+        '<strong>Cloudflare Worker</strong> sebagai proxy CORS. Frontend memanggil Worker, ' +
+        'Worker memanggil Apps Script dari sisi server lalu mengembalikan header ' +
+        '<code>Access-Control-Allow-Origin</code> yang benar. Lanjut ke Tahap 1 tetap berlaku, ' +
+        'hanya base URL API-nya yang menunjuk ke Worker.</div>';
+    }
+
+    runBtn.disabled = false;
+    runBtn.textContent = 'Jalankan Semua Uji Lagi';
+  }
+
+  runBtn.addEventListener('click', runTests);
+  urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runTests(); });
+})();
+</script>
 </body>
 </html>
