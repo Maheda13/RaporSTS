@@ -30,7 +30,7 @@
   var USER_KEY = 'rUser';     // cache identity untuk render awal (divalidasi ulang server)
 
   var session = {
-    token: global.localStorage.getItem(TOKEN_KEY) || '',
+    token: global.localStorage.getItem(TOKEN_KEY) || 'https://script.google.com/macros/s/AKfycbzDEjW0RvQt-XlvgMucca1BFWLVhKqO3VaxD0ug48SizO4AfOsZQOTVi-42HsUmKGenuA/exec',
     user: null
   };
   try {
