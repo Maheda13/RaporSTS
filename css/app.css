@@ -1,0 +1,88 @@
+/* eRapor DAFI — stylesheet frontend GitHub Pages (tanpa build step). */
+:root {
+  --primary-color: #B06161;
+  --primary-hover: #8a4b4b;
+  --bg-color: #F2EEE5;
+  --sidebar-bg: #34395e;
+}
+* { box-sizing: border-box; }
+body { font-family: 'Poppins', system-ui, sans-serif; background-color: var(--bg-color); margin: 0; }
+.bg-sidebar { background-color: var(--sidebar-bg); }
+
+/* ------------------------------------------------------------- Navigation */
+.nav-item {
+  color: #c9cbd6; transition: color .2s, background-color .2s; cursor: pointer;
+  border-left: 3px solid transparent; background: transparent; font: inherit;
+}
+.nav-item:hover { color: #fff; background-color: rgba(255,255,255,.1); }
+.nav-item.active-nav {
+  color: #fff; background-color: rgba(255,255,255,.1); font-weight: 600;
+  border-left: 3px solid #6777ef;
+}
+/* Focus indicator yang terlihat — sebelumnya dihapus (outline:none) di banyak tempat. */
+.nav-item:focus-visible, button:focus-visible, a:focus-visible,
+select:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 3px solid #f59e0b; outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ Loader */
+.loader {
+  border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-color); border-radius: 50%;
+  width: 50px; height: 50px; animation: spin 1s linear infinite;
+  position: fixed; top: 50%; left: 50%; margin: -25px 0 0 -25px;
+  z-index: 9999; display: none; box-shadow: 0 0 15px rgba(0,0,0,.2);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ------------------------------------------------------------------ Inputs */
+.input-field {
+  display: block; width: 100%; border-radius: .375rem; border: 1px solid #d1d5db;
+  background: #fff; color: #1f2937; padding: .5rem 1rem; height: 45px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.input-field:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(176,97,97,.2); }
+.btn-primary {
+  background-color: var(--primary-color); color: #fff; font-weight: 500;
+  padding: .5rem 1.5rem; border-radius: .375rem; min-height: 45px;
+  border: 0; cursor: pointer; font: inherit;
+}
+.btn-primary:hover { background-color: var(--primary-hover); }
+.btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+.card-shadow {
+  background: #fff; border-radius: .75rem; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #f3f4f6;
+}
+.hidden { display: none !important; }
+
+/* Tabel nilai */
+table input { text-align: center; min-width: 60px; border: 1px solid #e5e7eb; border-radius: .25rem; padding: .25rem; width: 100%; }
+table input:focus { border-color: var(--primary-color); background-color: #fff5f5; }
+.grade-input.input-invalid { border-color: #dc2626 !important; background: #fef2f2 !important; }
+
+/* ------------------------------------------------------------------- Toast */
+.toast {
+  position: fixed; bottom: 1.25rem; left: 50%; transform: translate(-50%, 150%);
+  background: #064e3b; color: #ecfdf5; padding: .8rem 1.4rem; border-radius: .75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25); font-weight: 600; z-index: 10000;
+  max-width: min(90vw, 34rem); text-align: center;
+  transition: transform .25s ease;
+}
+.toast-error { background: #7f1d1d; color: #fee2e2; }
+.toast-visible { transform: translate(-50%, 0); }
+
+/* ------------------------------------------------------- Sticky/frozen cell */
+.sticky { position: sticky; }
+
+/* -------------------------------------------------- Reduced-motion variant */
+@media (prefers-reduced-motion: reduce) {
+  .loader { animation-duration: 2.5s; }
+  * { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+/* ------------------------------------- Viewport-aware shell (d/h-screen lama
+   terjepit saat keyboard mobile muncul) */
+#app-view { height: 100vh; height: 100dvh; }
+
+/* ------------------------------------------------------- Contrast tweaks */
+.text-gray-500 { color: #4b5563; }  /* label kecil 10–12px lebih terbaca */
+.bg-sidebar .text-gray-400 { color: #b9bcc9; }
