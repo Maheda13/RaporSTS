@@ -22,7 +22,7 @@
   // mengedit source (mis. ditanam oleh GitHub Actions).
   // ---------------------------------------------------------------------------
   var CONFIG = {
-    apiUrl: global.ERAPOR_API_URL || '',
+    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbzDEjW0RvQt-XlvgMucca1BFWLVhKqO3VaxD0ug48SizO4AfOsZQOTVi-42HsUmKGenuA/exec',
     mode: 'direct' // 'direct' | 'proxy'
   };
 
@@ -30,7 +30,7 @@
   var USER_KEY = 'rUser';     // cache identity untuk render awal (divalidasi ulang server)
 
   var session = {
-    token: global.localStorage.getItem(TOKEN_KEY) || 'https://script.google.com/macros/s/AKfycbzDEjW0RvQt-XlvgMucca1BFWLVhKqO3VaxD0ug48SizO4AfOsZQOTVi-42HsUmKGenuA/exec',
+    token: global.localStorage.getItem(TOKEN_KEY) || '',
     user: null
   };
   try {
