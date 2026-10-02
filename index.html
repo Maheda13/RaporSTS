@@ -177,6 +177,19 @@
                         <div class="stat-card" style="--accent:#FDE047"><p class="label">Mata Pelajaran</p><p class="value" id="dash-mapel">0</p></div>
                         <div class="stat-card" style="--accent:#B06161"><p class="label">Data Nilai Input</p><p class="value" id="dash-nilai">0</p></div>
                     </div>
+                    <div id="dash-progress" class="hidden mt-5">
+                        <div class="card-shadow">
+                            <div class="section-head"><h4>Rekap Progres Kelengkapan</h4><span class="hint">Per kelas · per mata pelajaran · per guru</span></div>
+                            <div class="filter-bar">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div><label for="sum-sem" class="field-label">Semester</label><select id="sum-sem" class="input-field"></select></div>
+                                    <div><label for="sum-thn" class="field-label">Tahun Ajaran</label><select id="sum-thn" class="input-field"></select></div>
+                                </div>
+                                <button type="button" data-action="loadProgressSummary" class="btn-primary mt-4 w-full sm:w-auto"><i class="fas fa-chart-line mr-2" aria-hidden="true"></i> Muat Rekap Progres</button>
+                            </div>
+                            <div id="sum-area" class="grid grid-cols-1 lg:grid-cols-2 gap-x-5" role="status" aria-live="polite"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- CAPAIAN -->
@@ -352,6 +365,107 @@
                                 <thead id="m-table-head"></thead>
                                 <tbody id="m-table-body"></tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DATA SISWA (Operator) -->
+                <div id="p-siswa" class="page-section hidden">
+                    <div class="card-shadow">
+                        <div class="section-head"><h4>Data Siswa</h4><span class="hint">Tambah · ubah · pindah kelas — tanpa hapus</span></div>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="w-kelas" class="field-label">Filter Kelas</label><select id="w-kelas" class="input-field"></select></div>
+                                <div class="sm:col-span-2 flex items-end">
+                                    <button type="button" data-action="loadSiswaList" class="btn-primary w-full"><i class="fas fa-search mr-2" aria-hidden="true"></i> Tampilkan Siswa</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>NIS</th><th>NISN</th><th>Nama Siswa</th><th>Kelas</th><th class="center">Aksi</th></tr></thead>
+                                <tbody id="w-table-body"><tr><td colspan="5" class="empty-state">Pilih filter lalu klik Tampilkan Siswa.</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="filter-bar mt-4">
+                            <div class="section-head" style="padding-bottom:.6rem;margin-bottom:.8rem"><h4 style="font-size:.95rem">Tambah / Ubah Siswa</h4></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                <div><label for="w-nis" class="field-label">NIS</label><input type="text" id="w-nis" class="input-field" maxlength="32" placeholder="mis. 1003"></div>
+                                <div><label for="w-nisn" class="field-label">NISN (opsional)</label><input type="text" id="w-nisn" class="input-field" maxlength="10" inputmode="numeric" placeholder="angka"></div>
+                                <div><label for="w-nama" class="field-label">Nama Siswa</label><input type="text" id="w-nama" class="input-field" placeholder="Nama lengkap"></div>
+                                <div><label for="w-kelas-input" class="field-label">Kelas</label><select id="w-kelas-input" class="input-field"></select></div>
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-3 mt-4 justify-end">
+                                <button type="button" data-action="resetSiswaForm" class="btn-secondary">Bersihkan Form</button>
+                                <button type="button" data-action="saveSiswa" class="btn-primary"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Siswa</button>
+                            </div>
+                            <div id="w-status" role="status" aria-live="polite" class="mt-2 text-right text-sm font-bold min-h-[1.25rem]"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AKUN & RESET (Operator) -->
+                <div id="p-akun" class="page-section hidden">
+                    <div class="card-shadow">
+                        <div class="section-head"><h4>Akun &amp; Reset</h4><span class="hint">Reset password · ubah role &amp; kelas wali</span></div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Username</th><th>Nama</th><th>Role</th><th>Kelas Wali</th><th class="center">Aksi</th></tr></thead>
+                                <tbody id="ak-table-body"><tr><td colspan="5" class="empty-state">Memuat…</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="filter-bar mt-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="ak-username" class="field-label">Akun Target</label><input type="text" id="ak-username" class="input-field" placeholder="username" autocomplete="off"></div>
+                                <div><label for="ak-mode" class="field-label">Mode Reset</label>
+                                    <select id="ak-mode" class="input-field">
+                                        <option value="flag">Tandai wajib ganti password</option>
+                                        <option value="temporary">Setel password sementara</option>
+                                    </select>
+                                </div>
+                                <div id="ak-temp-wrap" class="hidden"><label for="ak-temp" class="field-label">Password Sementara (min 10)</label><input type="text" id="ak-temp" class="input-field" autocomplete="off"></div>
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-3 mt-4 justify-end">
+                                <button type="button" data-action="resetAccountTemp" id="ak-btn-temp" class="btn-primary hidden"><i class="fas fa-key mr-2" aria-hidden="true"></i> Setel Password Sementara</button>
+                                <button type="button" data-action="resetAccountFlag" id="ak-btn-flag" class="btn-primary"><i class="fas fa-flag mr-2" aria-hidden="true"></i> Tandai Wajib Reset</button>
+                            </div>
+                            <div id="ak-status" role="status" aria-live="polite" class="mt-2 text-sm font-bold min-h-[1.25rem]"></div>
+                            <div id="ak-temp-result" class="callout hidden mt-2"></div>
+                        </div>
+                        <div class="filter-bar mt-4">
+                            <div class="section-head" style="padding-bottom:.6rem;margin-bottom:.8rem"><h4 style="font-size:.95rem">Ubah Role &amp; Kelas Wali</h4></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="ak-role-user" class="field-label">Akun Target</label><input type="text" id="ak-role-user" class="input-field" placeholder="username" autocomplete="off"></div>
+                                <div><label for="ak-role" class="field-label">Role</label><select id="ak-role" class="input-field"></select></div>
+                                <div><label for="ak-kelas" class="field-label">Kelas Wali (khusus Wali Kelas)</label><select id="ak-kelas" class="input-field"></select></div>
+                            </div>
+                            <div class="flex justify-end mt-4">
+                                <button type="button" data-action="saveUserAccount" class="btn-primary"><i class="fas fa-user-check mr-2" aria-hidden="true"></i> Simpan Perubahan Akun</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PENUGASAN / PLOTTING (Operator) -->
+                <div id="p-plotting" class="page-section hidden">
+                    <div class="card-shadow">
+                        <div class="section-head"><h4>Penugasan Mengajar</h4><span class="hint">Plotting mata pelajaran per kelas — penghapusan manual di sheet</span></div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Username</th><th>Kelas</th><th>Kode Mapel</th></tr></thead>
+                                <tbody id="pl-table-body"><tr><td colspan="3" class="empty-state">Memuat…</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="filter-bar mt-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="pl-user" class="field-label">Username</label><select id="pl-user" class="input-field"></select></div>
+                                <div><label for="pl-kelas" class="field-label">Kelas</label><select id="pl-kelas" class="input-field"></select></div>
+                                <div><label for="pl-mapel" class="field-label">Kode Mapel</label><select id="pl-mapel" class="input-field"></select></div>
+                            </div>
+                            <div class="flex justify-end mt-4">
+                                <button type="button" data-action="saveAssignment" class="btn-primary"><i class="fas fa-plus mr-2" aria-hidden="true"></i> Tambah Penugasan</button>
+                            </div>
+                            <div id="pl-status" role="status" aria-live="polite" class="mt-2 text-right text-sm font-bold min-h-[1.25rem]"></div>
                         </div>
                     </div>
                 </div>
