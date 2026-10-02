@@ -10,6 +10,8 @@
   let gradeDirty = false;
   let pendingSave = false;
   let toastTimer = 0;
+  let navSeq = 0;          // guard navigasi async: hasil lambat tak menimpa klik berikutnya
+  let activeRaporTab = 'aktif';   // tab rapor yang sedang aktif ('aktif'|'arsip')
 
   const PERIOD_OPTIONS = [
     ['Ganjil', '2025/2026'], ['Genap', '2025/2026'],
@@ -30,6 +32,54 @@
     el.classList.add('toast-visible');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('toast-visible'), 4500);
+  }
+
+  // --------------------------------------------- Layar progres boot (Tahap 9)
+  // Satu layar bertahap menemani pemanggilan data awal (validateSession saat
+  // restore sesi, getInitialData, getDashboardStats), menggantikan berkedipnya
+  // #loader global pada tiap request kecil.
+  const BOOT_STEPS = ['session', 'initial', 'dashboard'];
+  let bootRetry = null;   // callback "Coba lagi" terakhir
+
+  function bootStart() {
+    const view = $('#boot-view');
+    if (!view) return;
+    view.classList.remove('hidden');
+    $('#login-view')?.classList.add('hidden');
+    $('#reset-view')?.classList.add('hidden');
+    $('#boot-error')?.classList.add('hidden');
+    $('#boot-retry')?.classList.add('hidden');
+    bootRetry = null;
+    // Reset status semua langkah.
+    BOOT_STEPS.forEach(k => {
+      const step = document.querySelector('[data-boot-step="' + k + '"]');
+      if (step) step.classList.remove('is-active', 'is-done', 'is-error');
+    });
+  }
+  function bootStep(key, state) {
+    const step = document.querySelector('[data-boot-step="' + key + '"]');
+    if (!step) return;
+    // Satu langkah aktif dalam satu waktu; keadaan sebelumnya ditutup sebagai selesai.
+    BOOT_STEPS.forEach(k => {
+      const el = document.querySelector('[data-boot-step="' + k + '"]');
+      if (el && k !== key) el.classList.remove('is-active');
+    });
+    step.classList.toggle('is-active', state === 'active');
+    step.classList.toggle('is-done', state === 'done');
+    step.classList.toggle('is-error', state === 'error');
+  }
+  function bootDone() {
+    $('#boot-view')?.classList.add('hidden');
+    bootRetry = null;
+  }
+  /** Gagal di tengah boot: tampilkan pesan + Coba lagi (app-shell tidak pernah
+   *  tampil setengah jadi). `retry` = fungsi untuk menjalankan ulang boot. */
+  function bootFail(message, retry) {
+    $('#boot-error').textContent = message;
+    $('#boot-error').classList.remove('hidden');
+    const btn = $('#boot-retry');
+    btn.classList.remove('hidden');
+    bootRetry = retry;
   }
 
   function setBusy(button, busy, text) {
@@ -58,6 +108,42 @@
     setTimeout(() => { if (span.parentNode === el) el.replaceChildren(); }, 5000);
   }
 
+  /**
+   * Konfirmasi inline menggantikan dialog native (Tahap 10) — dialog bawaan OS
+   * memblokir thread & tampil beda tiap platform. Bar muncul di bawah layar dengan
+   * `okLabel` khusus untuk aksi berisiko (mis. "Jalankan Promosi").
+   * @returns {Promise<boolean>} true bila pengguna menekan tombol ya.
+   */
+  function confirmBar(text, okLabel) {
+    return new Promise(resolve => {
+      let el = $('#confirm-bar');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'confirm-bar';
+        el.className = 'confirm-bar';
+        document.body.appendChild(el);
+      }
+      el.replaceChildren();
+      el.setAttribute('role', 'alertdialog');
+      el.setAttribute('aria-modal', 'true');
+      el.setAttribute('aria-label', 'Konfirmasi');
+      const msg = document.createElement('p'); msg.className = 'confirm-msg'; msg.textContent = text;
+      const no = document.createElement('button');
+      no.type = 'button'; no.className = 'btn-secondary'; no.textContent = 'Batal';
+      const yes = document.createElement('button');
+      yes.type = 'button'; yes.className = 'btn-primary'; yes.textContent = okLabel || 'Ya, lanjutkan';
+      const row = document.createElement('div'); row.className = 'confirm-actions'; row.append(no, yes);
+      el.append(msg, row);
+      el.classList.remove('hidden');
+      yes.focus();
+      const done = ok => { el.classList.add('hidden'); document.removeEventListener('keydown', onKey); resolve(ok); };
+      const onKey = e => { if (e.key === 'Escape') done(false); };
+      yes.onclick = () => done(true);
+      no.onclick = () => done(false);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+
   function setOptions(select, options, placeholder) {
     select.replaceChildren();
     if (placeholder !== false) {
@@ -77,14 +163,83 @@
     ['n','a','e','s','r','m','sum'].forEach(prefix => {
       const sem = $('#' + prefix + '-sem');
       const year = $('#' + prefix + '-thn');
-      if (sem) setOptions(sem, ['Ganjil','Genap']);
-      if (year) setOptions(year, [...new Set(PERIOD_OPTIONS.map(x => x[1]))]);
+      if (sem) { setOptions(sem, ['Ganjil','Genap']); }
+    if (year) { setOptions(year, [...new Set(PERIOD_OPTIONS.map(x => x[1]))]); }
     });
+  }
+
+  /**
+   * Terapkan periode aktif (dari server) ke seluruh dropdown periode (Tahap 9).
+   *  - Halaman INPUT (n nilai, a absen, e ekstra, r cetak, c capaian) → terkunci
+   *    pada periode aktif: value terisi, disabled. Menulis ke periode lain
+   *    ditolak server (PERIOD_ARCHIVED), jadi pilihan palsu hanya membingungkan.
+   *  - Halaman BACA (s status, m monitor, sum rekap) → bebas pilih dari
+   *    daftar periode berisi data (arsip tetap bisa dilihat).
+   *  - Kartu pengatur (ap-*) → bebas, untuk Operator/Admin.
+   */
+  function applyPeriods() {
+    const periode = DATA.periode || {};
+    const aktif = periode.aktif || null;
+    const tersedia = periode.tersedia || [];    // [{semester, tahunAjaran}]
+    // Fallback: server belum pernah menyimpan periode & belum ada data —
+    // tetap tampilkan pilihan agar UI tidak kosong total.
+    const free = tersedia.length ? tersedia.map(p => [p.semester, p.tahunAjaran]) : PERIOD_OPTIONS.map(x => [x[0], x[1]]);
+    const setLocked = (prefix) => {
+      const sem = $('#' + prefix + '-sem'), year = $('#' + prefix + '-thn');
+      [sem, year].forEach(el => { if (el) el.disabled = true; });
+      if (!aktif) {
+        // Tanpa periode aktif → kosongkan (tulis akan ditolak server PERIOD_NOT_SET).
+        [sem, year].forEach(el => { if (el) setOptions(el, [], false); });
+        return;
+      }
+      // Tetap sisakan SATU opsi bernilai periode aktif — select tanpa opsi
+      // tidak bisa memegang .value, sehingga tampilannya justru kosong.
+      if (sem) { setOptions(sem, [[aktif.semester, aktif.semester]], false); sem.value = aktif.semester; }
+      if (year) { setOptions(year, [[aktif.tahunAjaran, aktif.tahunAjaran]], false); year.value = aktif.tahunAjaran; }
+    };
+    const setFree = (prefix) => {
+      const sem = $('#' + prefix + '-sem'), year = $('#' + prefix + '-thn');
+      [sem, year].forEach(el => { if (!el) return; el.disabled = false; });
+      // Isi semester dari daftar (Ganjil/Genap unik) & tahun dari daftar unik.
+      if (sem) { setOptions(sem, [...new Set(free.map(x => x[0]))]); if (aktif) sem.value = aktif.semester; }
+      if (year) { setOptions(year, [...new Set(free.map(x => x[1]))]); if (aktif) year.value = aktif.tahunAjaran; }
+    };
+    ['n','a','e','r','c'].forEach(setLocked);   // input → terkunci periode aktif
+    ['s','m','sum'].forEach(setFree);           // baca → bebas pilih
+    // Kartu pengatur Operator/Admin.
+    if ($('#ap-sem') && $('#ap-thn')) {
+      setOptions($('#ap-sem'), [...new Set(free.map(x => x[0]))]);
+      setOptions($('#ap-thn'), [...new Set(free.map(x => x[1]))]);
+      if (aktif) { $('#ap-sem').value = aktif.semester; $('#ap-thn').value = aktif.tahunAjaran; }
+    }
+    ['n','a','e','r','c'].forEach(prefix => {
+      const chip = $('[data-period-chip="' + prefix + '"]');
+      if (chip) {
+        chip.replaceChildren();
+        if (aktif) {
+          chip.append('Periode aktif: ');
+          const strong = document.createElement('strong'); strong.textContent = aktif.semester + ' ' + aktif.tahunAjaran;
+          chip.appendChild(strong);
+        } else chip.textContent = 'Periode aktif belum ditetapkan';
+      }
+    });
+    const badge = $('#period-badge');
+    if (badge) {
+      badge.classList.toggle('hidden', !aktif);
+      badge.textContent = aktif ? aktif.semester + ' ' + aktif.tahunAjaran : '';
+    }
+    // Arsip: defaultkan ke periode berbeda yang masih berisi data.
+    if (aktif && tersedia.length > 1 && $('#ar-sem')) {
+      const lain = tersedia.find(p => !(p.semester === aktif.semester && p.tahunAjaran === aktif.tahunAjaran));
+      const chosen = lain || tersedia[0];
+      $('#ar-sem').value = chosen.semester; $('#ar-thn').value = chosen.tahunAjaran;
+    }
   }
 
   function resetSessionExpired(err) {
     USER = null; DATA = {};
     $('#app-view').classList.add('hidden');
+    $('#boot-view')?.classList.add('hidden');
     $('#login-view').classList.remove('hidden');
     $('#reset-view')?.classList.add('hidden');
     const error = $('#login-error');
@@ -104,25 +259,15 @@
     bindEvents();
     const toggleButton = $('#toggle-login-password');
     if (toggleButton) toggleButton.addEventListener('click', toggleLoginPassword);
+    // Coba lagi di layar progres (setelah boot gagal karena jaringan/CORS).
+    const retry = $('#boot-retry');
+    if (retry) retry.addEventListener('click', () => { if (bootRetry) bootRetry(); });
 
     if (isAuthenticated()) {
-      try {
-        USER = await api('validateSession', {}, { timeout: 15000 });
-        setSession(window.ERAPOR.getToken(), USER);
-        enterApp();
-        return;
-      } catch (e) {
-        clearSession();
-        if (e.code === 'AUTH_EXPIRED' || e.code === 'AUTH_REQUIRED') {
-          resetSessionExpired(e);
-          return;
-        }
-        // Network/CORS errors: do NOT show cached profile as authenticated.
-        $('#login-view').classList.remove('hidden');
-        $('#login-error').classList.remove('hidden');
-        $('#login-error').textContent = e.message + ' Coba lagi saat koneksi pulih.';
-        return;
-      }
+      // Seluruh rangkaian (validasi sesi → data awal → dashboard) berjalan di
+      // layar progres; gagal jaringan menampilkan Coba lagi di layar itu.
+      await enterApp(false);
+      return;
     }
     $('#login-view').classList.remove('hidden');
   }
@@ -132,14 +277,21 @@
     document.addEventListener('change', e => {
       const id = e.target && e.target.id;
       if (!id) return;
+      // `isTrusted` = false untuk Event yang didispatch programatis (popDrops boot).
+      // Auto-load halaman hanya pada interaksi user asli — tanpa guard ini setiap
+      // halaman termuat dua kali (dispatch boot + auto-load nav).
+      const userGesture = e.isTrusted !== false;
       if (id === 'c-kelas') updateSubjects(e.target.value, 'c-mapel');
-      if (id === 'n-kelas') { updateSubjects(e.target.value, 'n-mapel'); checkAndLoadNilai(); }
-      if (['n-mapel','n-sem','n-thn'].includes(id)) checkAndLoadNilai();
-      if (id === 'a-kelas' || id === 'a-sem' || id === 'a-thn') loadAbsen();
-      if (id === 'e-kelas' || id === 'e-sem' || id === 'e-thn') loadEkstra();
-      if (id === 'r-kelas') loadSiswa(e.target.value);
-      if (id === 'c-mapel') loadCapaian();
+      if (id === 'n-kelas') { updateSubjects(e.target.value, 'n-mapel'); if (userGesture) checkAndLoadNilai(); }
+      if (['n-mapel','n-sem','n-thn'].includes(id) && userGesture) checkAndLoadNilai();
+      if (id === 'a-kelas' || id === 'a-sem' || id === 'a-thn') { if (userGesture) loadAbsen(); }
+      if (id === 'e-kelas' || id === 'e-sem' || id === 'e-thn') { if (userGesture) loadEkstra(); }
+      // Guard sama seperti halaman lain: preselect boot tidak boleh memicu
+      // muat daftar siswa halaman rapor yang belum dibuka (toast error saat login).
+      if (id === 'r-kelas' && userGesture) loadSiswa(e.target.value);
+      if (id === 'c-mapel' && userGesture) loadCapaian();
       if (id === 'm-kelas' || id === 'm-sem' || id === 'm-thn') { /* explicit button */ }
+      if (id === 'ar-kelas' && userGesture) loadArchiveStudents(e.target.value);
       if (id === 'ak-mode') {
         const temp = e.target.value === 'temporary';
         $('#ak-temp-wrap')?.classList.toggle('hidden', !temp);
@@ -169,6 +321,9 @@
       if (navLink) { e.preventDefault(); nav(navLink.dataset.nav); }
       const button = e.target.closest('[data-action]');
       if (button) { e.preventDefault(); runAction(button.dataset.action, button); }
+      // Tab halaman Rapor (Periode Aktif | Arsip).
+      const raporTab = e.target.closest('#rapor-tab-active, #rapor-tab-archive');
+      if (raporTab) switchRaporTab(raporTab.id === 'rapor-tab-archive' ? 'arsip' : 'aktif');
     });
 
     // Score keyboard navigation: Enter moves one row down, Shift+Enter up.
@@ -188,7 +343,9 @@
       saveNilaiManual, uploadNilai, saveAbsen, saveEkstra, loadStatus,
       previewRapor, doPrint, bulkPrint, changePw, loadMonitoring,
       loadSiswaList, saveSiswa, resetSiswaForm, editSiswa, resetAccountFlag, resetAccountTemp,
-      saveUserAccount, loadAccounts, saveAssignment, loadProgressSummary
+      saveUserAccount, loadAccounts, saveAssignment, loadProgressSummary,
+      previewPromotion, commitPromotion,
+      setActivePeriod, loadArchive, archivePreview, archivePrint, archiveBulkPrint
     };
     if (actions[name]) actions[name](button);
   }
@@ -215,7 +372,7 @@
         $('#reset-view').classList.remove('hidden');
         $('#login-view').classList.add('hidden');
       } else if (result && result.token && result.user) {
-        setSession(result.token, result.user); USER = result.user; enterApp();
+        setSession(result.token, result.user); USER = result.user; enterApp(true);
       } else throw new Error('Respons login tidak lengkap.');
     } catch (e) {
       $('#login-error').textContent = e.message; $('#login-error').classList.remove('hidden');
@@ -234,57 +391,135 @@
     const button = $('#reset-submit'); setBusy(button, true, 'Mengubah password…');
     try {
       const result = await api('resetPassword', { username, oldPassword, newPassword }, { auth: false });
-      setSession(result.token, result.user); USER = result.user; enterApp();
+      setSession(result.token, result.user); USER = result.user; enterApp(true);
     } catch (e) { status.textContent = e.message; }
     finally { setBusy(button, false); }
   }
 
+  let loggingOut = false;   // tombol logout bisa diklik ganda sebelum reload
   async function handleLogout() {
+    if (loggingOut) return;
+    // Keluar dengan nilai belum disimpan = hilang diam-diam. Samakan dengan nav().
+    if (gradeDirty) {
+      const ok = await confirmBar('Ada perubahan nilai yang belum disimpan. Keluar sekarang?');
+      if (!ok) return;
+    }
+    loggingOut = true;
     try { if (isAuthenticated()) await api('logout', {}, { timeout: 10000 }); }
     catch (_) { /* hapus token lokal walau server tak terjangkau */ }
     clearSession(); USER = null; DATA = {};
     location.reload();
   }
 
-  async function enterApp() {
-    $('#login-view').classList.add('hidden'); $('#reset-view')?.classList.add('hidden'); $('#app-view').classList.remove('hidden');
+  /**
+   * Masuk ke aplikasi + muat data awal, dengan layar progres bertahap.
+   * Urutan: MUNGKIN dapat `initial` (sesi sudah divalidasi) → getInitialData →
+   * getDashboardStats → SEMUA DATA SIAP → baru paint shell. Dengan begitu
+   * dashboard tidak pernah menampilkan angka 0 dan #loader tidak berkedip.
+   * @param {boolean} [validated] true bila sesi sudah divalidasi (langkah 1 dilewati)
+   * @returns {Promise<boolean>} false bila gagal (login ditampilkan lagi / retry)
+   */
+  async function enterApp(validated) {
+    const boot = () => bootRun(validated);
+    bootStart();
+    return boot();
+  }
+  async function bootRun(validated) {
+    // `current` = langkah yang sedang berjalan; inilah yang ditandai error bila
+    // melempar (pencarian "langkah belum done" bisa salah pilih bila sebuah
+    // langkah gagal setelah step berikutnya sempat ditandai done).
+    let current = 'session';
+    if (!validated) bootStep('session', 'active');
+    else bootStep('session', 'done');
+    try {
+      // Langkah 1 — hanya pada restore sesi; login baru sudah mengembalikan identitas.
+      if (!validated) {
+        current = 'session';
+        USER = await api('validateSession', {}, { timeout: 15000, silent: true });
+        setSession(window.ERAPOR.getToken(), USER);
+        bootStep('session', 'done');
+      }
+      // Langkah 2 — data awal (kelas/mapel/ekstra + periode aktif & arsip).
+      current = 'initial';
+      bootStep('initial', 'active');
+      DATA = await api('getInitialData', {}, { silent: true });
+      applyPeriods();
+      bootStep('initial', 'done');
+      // Langkah 3 — statistik dashboard.
+      current = 'dashboard';
+      bootStep('dashboard', 'active');
+      let stats = null;
+      try { stats = await api('getDashboardStats', {}, { silent: true }); }
+      catch (e) { if (e.code === 'AUTH_EXPIRED' || e.code === 'AUTH_REQUIRED') throw e; }
+      bootStep('dashboard', 'done');
+      bootDone();
+      paintApp(stats);
+      return true;
+    } catch (e) {
+      if (e.code === 'AUTH_EXPIRED' || e.code === 'AUTH_REQUIRED') {
+        clearSession(); bootDone(); resetSessionExpired(e); return false;
+      }
+      // Kegagalan jaringan/CORS → layar boot tetap, tersedia Coba lagi.
+      bootStep(current, 'error');
+      bootFail(e.message || 'Gagal memuat data. Periksa koneksi.', () => enterApp(validated));
+      return false;
+    }
+  }
+  /** Tampilan shell hanya setelah data awal lengkap. */
+  function paintApp(stats) {
+    $('#login-view').classList.add('hidden'); $('#reset-view')?.classList.add('hidden');
+    $('#app-view').classList.remove('hidden');
     const name = USER.fullName || USER.username;
     $('#display-username').textContent = name; $('#dash-greeting-name').textContent = name;
     $('#display-role').textContent = USER.role;
     $('#user-avatar').src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&background=B06161&color=fff';
     $('#profile-button').setAttribute('aria-label', 'Pengaturan akun ' + name);
-    $('#menu-admin').classList.toggle('hidden', USER.role !== 'Admin');
     // Rekap progres hanya untuk pemantau (Waka Kurikulum & Admin).
     $('#dash-progress')?.classList.toggle('hidden', !(USER.role === 'Waka Kurikulum' || USER.role === 'Admin'));
+    // Dua wajah dashboard (keputusan pemilik Tahap 10): admin/Operator/Waka melihat
+    // statistik sekolah; Guru Mapel & Wali Kelas melihat daftar tugas mereka.
+    const isTeacher = USER.role === 'Guru Mapel' || USER.role === 'Wali Kelas';
+    $('#dash-stats')?.classList.toggle('hidden', isTeacher);
+    $('#dash-workbench')?.classList.toggle('hidden', !isTeacher);
+    // Tab rapor default per role; Guru Mapel tidak punya panel "Periode Aktif"
+    // (server menolak getRaportData via assertClassAccess_).
+    activeRaporTab = USER.role === 'Guru Mapel' ? 'arsip' : 'aktif';
+    $('#rapor-tab-active')?.classList.toggle('hidden', USER.role !== 'Admin' && USER.role !== 'Wali Kelas');
+    popDrops();
     buildMenu(USER.role);
-    try {
-      DATA = await api('getInitialData');
-      popDrops();
-      await loadDash();
-    } catch (e) { toast(e.message, false); }
+    if (stats) renderDashStats(stats);
+    // Statistik bisa saja gagal (bukan error auth) → muat lagi di latar belakang.
+    if (!stats) loadDash();
+    if (isTeacher) loadWorkbench();
+  }
+  function renderDashStats(s) {
+    $('#dash-siswa').textContent = s.siswa; $('#dash-kelas').textContent = s.kelas;
+    $('#dash-mapel').textContent = s.mapel; $('#dash-nilai').textContent = s.nilai;
   }
 
   // -------------------------------------------------------------- Navigation
   const MENUS = {
     'Guru Mapel': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-capaian','fas fa-book','Input Capaian'],
-      ['p-nilai','far fa-file-alt','Input Nilai'], ['p-status','fas fa-chart-line','Status Nilai']
+      ['p-nilai','far fa-file-alt','Input Nilai'], ['p-status','fas fa-chart-line','Status Nilai'],
+      ['p-rapor','fas fa-print','Rapor']
     ],
     'Wali Kelas': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-absen','fas fa-user-clock','Absensi'],
-      ['p-ekstra','fas fa-running','Ekstrakurikuler'], ['p-cetak','fas fa-print','Cetak Rapor']
+      ['p-ekstra','fas fa-running','Ekstrakurikuler'], ['p-status','fas fa-chart-line','Status Nilai'],
+      ['p-rapor','fas fa-print','Rapor']
     ],
     'Admin': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-capaian','fas fa-book','Input Capaian'],
       ['p-nilai','far fa-file-alt','Input Nilai'], ['p-absen','fas fa-user-clock','Absensi'],
       ['p-ekstra','fas fa-running','Ekstrakurikuler'], ['p-status','fas fa-chart-line','Status Nilai'],
-      ['p-cetak','fas fa-print','Cetak Rapor'], ['p-siswa','fas fa-user-graduate','Data Siswa'],
-      ['p-akun','fas fa-user-shield','Akun & Reset'], ['p-plotting','fas fa-diagram-project','Penugasan']
+      ['p-rapor','fas fa-print','Rapor'], ['p-siswa','fas fa-user-graduate','Data Siswa'],
+      ['p-akun','fas fa-user-shield','Akun & Reset'], ['p-plotting','fas fa-diagram-project','Penugasan'],
+      ['p-monitor','fas fa-chart-pie','Pantau Kelengkapan']
     ],
     'Operator': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-siswa','fas fa-user-graduate','Data Siswa'],
-      ['p-akun','fas fa-user-shield','Akun & Reset'], ['p-plotting','fas fa-diagram-project','Penugasan'],
-      ['p-status','fas fa-chart-line','Status Nilai']
+      ['p-akun','fas fa-user-shield','Akun & Reset'], ['p-plotting','fas fa-diagram-project','Penugasan']
     ],
     'Waka Kurikulum': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-status','fas fa-chart-line','Status Nilai'],
@@ -316,21 +551,97 @@
         li.appendChild(button); drawer.appendChild(li);
       }
     });
+    // Scroll-fade hanya bila menu benar-benar melebihi lebar layar (Tahap 10):
+    // tanpa ini bayangan muncul permanen pada menu yang muat.
+    if (top) requestAnimationFrame(() => top.classList.toggle('nav-fade', top.scrollWidth > top.clientWidth + 1));
     nav('p-dashboard');
   }
-  function nav(id) {
-    if (gradeDirty && id !== 'p-nilai' && !confirm('Ada perubahan nilai yang belum disimpan. Tinggalkan halaman?')) return;
+  /** Judul & subjudul per halaman — lebih berguna daripada id huruf kapital. */
+  const PAGE_META = {
+    'p-dashboard': ['Dashboard', 'Ringkasan kerja dan status hari ini'],
+    'p-capaian': ['Input Capaian', 'Deskripsi capaian per kelas, mapel, dan periode aktif'],
+    'p-nilai': ['Input Nilai', 'Nilai ulangan harian, STS, dan SAS — periode aktif'],
+    'p-status': ['Status Nilai', 'Kelengkapan nilai per kelas dan mata pelajaran'],
+    'p-absen': ['Absensi', 'Sakit, izin, dan alpha per siswa — periode aktif'],
+    'p-ekstra': ['Ekstrakurikuler', 'Nilai kegiatan per siswa — periode aktif'],
+    'p-rapor': ['Rapor', 'Pratinjau dan cetak PDF — periode aktif maupun arsip'],
+    'p-monitor': ['Pantau Kelengkapan', 'Leger nilai seluruh siswa per kelas'],
+    'p-siswa': ['Data Siswa', 'Kelola data siswa, promosi kelas, dan status kelulusan'],
+    'p-akun': ['Akun & Reset', 'Reset password, ubah role, dan periode aktif'],
+    'p-plotting': ['Penugasan', 'Plotting mata pelajaran per kelas'],
+    'p-pass': ['Pengaturan Akun', 'Ganti password Anda']
+  };
+
+  async function nav(id) {
+    const seq = ++navSeq;
+    if (gradeDirty && id !== 'p-nilai') {
+      const ok = await confirmBar('Ada perubahan nilai yang belum disimpan. Tinggalkan halaman?');
+      if (!ok || seq !== navSeq) return;
+    }
     $$('.page-section').forEach(el => el.classList.add('hidden'));
     const page = document.getElementById(id); if (!page) return;
-    page.classList.remove('hidden'); $('#page-title').textContent = id.replace('p-','').replace(/-/g,' ').toUpperCase();
+    page.classList.remove('hidden');
+    const meta = PAGE_META[id];
+    $('#page-title').textContent = meta ? meta[0] : id.replace('p-', '').replace(/-/g, ' ').toUpperCase();
+    const sub = $('#page-sub');
+    if (sub) sub.textContent = meta ? meta[1] : 'Sistem Penilaian Terpadu SMP-MA DAFI';
     $$('.nav-item').forEach(el => { el.classList.remove('active-nav'); el.removeAttribute('aria-current'); });
     ['#link-','#toplink-'].forEach(sel => {
       const link = $(sel + id);
       if (link) { link.classList.add('active-nav'); link.setAttribute('aria-current','page'); }
     });
     if (innerWidth < 768) closeSidebar();
+    // ---- Halaman yang langsung termuat (Tahap 10): tidak perlu klik "Muat" manual.
     if (id === 'p-akun' || id === 'p-plotting') loadAccounts();
-    if (id === 'p-siswa') loadSiswaList();
+    if (id === 'p-siswa') { loadSiswaList(); promotionOptions(); }
+    if (id === 'p-nilai') { preselectNilai(); checkAndLoadNilai(); }
+    if (id === 'p-absen') loadAbsen();
+    if (id === 'p-ekstra') loadEkstra();
+    if (id === 'p-capaian') { preselectCapaian(); loadCapaian(); }
+    if (id === 'p-status') loadStatus();
+    if (id === 'p-rapor') {
+      // Tab default sudah diset paintApp per role (Guru Mapel → arsip).
+      switchRaporTab(activeRaporTab, true);
+    }
+    if (id === 'p-monitor') loadMonitoring();
+  }
+  /** Preselect kelas & mapel pertama agar auto-load benar-benar memuat tabel. */
+  function preselectNilai() {
+    const k = $('#n-kelas'), m = $('#n-mapel');
+    if (k && !k.value && k.options.length > 1) k.value = k.options[1].value;
+    if (k && k.value) {
+      if (!m || !m.value) {
+        updateSubjects(k.value, 'n-mapel');
+        if (m && m.options.length > 1) { m.value = m.options[1].value; }
+      }
+    }
+  }
+  function preselectCapaian() {
+    const k = $('#c-kelas'), m = $('#c-mapel');
+    if (k && !k.value && k.options.length > 1) k.value = k.options[1].value;
+    if (k && k.value) {
+      if (!m || !m.value) {
+        updateSubjects(k.value, 'c-mapel');
+        if (m && m.options.length > 1) m.value = m.options[1].value;
+      }
+    }
+  }
+  /** Ganti panel rapor (Periode Aktif | Arsip). Inisialisasi arsip dipanggil di sini. */
+  function switchRaporTab(tab, silent) {
+    activeRaporTab = tab === 'arsip' ? 'arsip' : 'aktif';
+    const showAktif = activeRaporTab === 'aktif';
+    $('#p-cetak')?.classList.toggle('hidden', !showAktif);
+    $('#p-arsip')?.classList.toggle('hidden', showAktif);
+    $('#rapor-tab-active')?.setAttribute('aria-selected', String(showAktif));
+    $('#rapor-tab-archive')?.setAttribute('aria-selected', String(!showAktif));
+    if (!showAktif) archiveOptions();   // isi filter arsip + gate blok cetak per role
+    else {
+      // Preselect kelas di popDrops tidak memicu loadSiswa (guard isTrusted),
+      // jadi muat daftar siswa cetak di sini agar tab Aktif tidak pernah kosong.
+      const kelas = $('#r-kelas');
+      if (kelas && kelas.value) loadSiswa(kelas.value);
+    }
+    if (!silent) $('#page-title')?.focus?.();
   }
   function toggleSidebar() {
     const side = $('#sidebar'), overlay = $('#mobile-overlay'), btn = $('#sidebar-toggle');
@@ -354,6 +665,9 @@
       setOptions(el, classes);
       if (USER.role === 'Wali Kelas' && USER.waliKelasOf) { el.value = USER.waliKelasOf; el.disabled = true; }
       else el.disabled = false;
+      // Preselect kelas pertama (Tahap 10) agar halaman auto-load punya input;
+      // dispatch sintetis ditahan guard isTrusted di handler change.
+      if (!el.value && classes.length) el.value = classes[0];
       if (el.value) el.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
@@ -364,6 +678,8 @@
     const seen = new Set();
     const options = rows.filter(m => { if (seen.has(m.kode)) return false; seen.add(m.kode); return true; }).map(m => [m.kode, m.nama]);
     setOptions(select, options);
+    // Preselect mapel pertama bila belum ada pilihan — auto-load butuh nilai terisi.
+    if (select && !select.value && options.length) select.value = options[0][0];
   }
   async function loadDash() {
     try {
@@ -373,11 +689,96 @@
     } catch (e) { toast(e.message, false); }
   }
 
+  // ---------------------------------------------------- Daftar tugas guru (Tahap 10)
+  /** Dashboard Guru Mapel & Wali Kelas: pasangan kelas×mapel yang diampu + status
+   *  isinya + pintu langsung ke halaman input. Menggantikan 4 kartu statistik global
+   *  yang tidak menjawab "hari ini kerja apa". */
+  async function loadWorkbench() {
+    const area = $('#dash-workbench-list');
+    if (!area) return;
+    area.replaceChildren();
+    let d;
+    try {
+      d = await api('getMyWorkbench', {}, { silent: true });
+    } catch (e) {
+      const err = document.createElement('div'); err.className = 'callout bad';
+      err.setAttribute('role', 'alert'); err.textContent = e.message;
+      area.appendChild(err); return;
+    }
+    if (!d.periode) {
+      const warn = document.createElement('div'); warn.className = 'callout';
+      warn.setAttribute('role', 'status');
+      warn.textContent = 'Periode aktif belum ditetapkan Operator/Admin — input nilai, absensi, ekstra, dan capaian belum dapat ditulis.';
+      area.appendChild(warn); return;
+    }
+    if (!d.tugas.length) {
+      const empty = document.createElement('div'); empty.className = 'empty-state';
+      empty.textContent = 'Belum ada penugasan mata pelajaran untuk akun ini.';
+      area.appendChild(empty); return;
+    }
+    d.tugas.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'status-card';
+      const head = document.createElement('div'); head.className = 'status-card-head';
+      const label = document.createElement('span');
+      label.textContent = t.nama + ' · ' + t.kelas;
+      const pct = document.createElement('span');
+      pct.className = 'badge ' + (t.nilai.persen === 100 ? 'badge-ok' : t.nilai.persen >= 70 ? 'badge-warn' : 'badge-bad');
+      pct.textContent = t.nilai.persen + '%';
+      head.append(label, pct);
+      const ul = document.createElement('ul');
+      const row = document.createElement('li'); row.className = 'status-row';
+      const left = document.createElement('span'); left.className = 'name';
+      left.textContent = 'Nilai ' + t.nilai.terisi + '/' + t.nilai.total + ' siswa';
+      const cap = document.createElement('span');
+      cap.className = 'badge ' + (t.capaian ? 'badge-ok' : 'badge-warn');
+      cap.textContent = t.capaian ? 'Capaian ✓' : 'Capaian –';
+      row.append(left, cap);
+      ul.appendChild(row);
+      // Pintu harus menunjuk halaman yang BENAR-BENAR ada di menu role tsb.
+      // Menu Wali Kelas sengaja tanpa p-nilai/p-capaian (ia memantau lewat
+      // Status Nilai) — memberi pintu ke sana membuat navigasi buntu.
+      const role = (USER && USER.role) || '';
+      const menuIds = (MENUS[role] || []).map(x => x[0]);
+      const go = document.createElement('li'); go.className = 'status-row';
+      if (menuIds.indexOf('p-nilai') >= 0) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'btn-secondary'; btn.textContent = 'Input Nilai';
+        btn.onclick = () => { openWorkbench('p-nilai', t.kelas, t.kode); };
+        go.appendChild(btn);
+      }
+      if (menuIds.indexOf('p-capaian') >= 0) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'btn-secondary'; btn.textContent = 'Capaian';
+        btn.onclick = () => { openWorkbench('p-capaian', t.kelas, t.kode); };
+        go.appendChild(btn);
+      }
+      // Fallback peran pengawas: tautkan ke Status Nilai (ada di menunya).
+      if (go.children.length === 0 && menuIds.indexOf('p-status') >= 0) {
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'btn-secondary'; btn.textContent = 'Lihat Status';
+        btn.onclick = () => nav('p-status');
+        go.appendChild(btn);
+      }
+      if (go.children.length) ul.appendChild(go);
+      card.append(head, ul);
+      area.appendChild(card);
+    });
+  }
+  /** Pintu langsung dari dashboard: preselect kelas+mapel lalu buka halaman. */
+  function openWorkbench(page, kelas, kode) {
+    const prefix = page === 'p-nilai' ? 'n' : 'c';
+    const k = $('#' + prefix + '-kelas'), m = $('#' + prefix + '-mapel');
+    if (k) { k.value = kelas; updateSubjects(kelas, prefix + '-mapel'); }
+    if (m) m.value = kode;
+    nav(page);
+  }
+
   // --------------------------------------------------------- Capaian
   async function loadCapaian() {
     const kode = $('#c-mapel').value, kelas = $('#c-kelas').value;
     if (!kode || !kelas) return;
-    try { $('#c-text').value = await api('getCapaian', { kode, kelas }); updateCapaianCount(); }
+    try { $('#c-text').value = await api('getCapaian', { kode, kelas, semester: $('#c-sem').value, tahunAjaran: $('#c-thn').value }); updateCapaianCount(); }
     catch (e) { toast(e.message, false); }
   }
   function updateCapaianCount() {
@@ -390,7 +791,7 @@
     if (!kode || !kelas) return toast('Pilih kelas dan mata pelajaran.', false);
     if (teks.trim().split(/\s+/).filter(Boolean).length > 25) return toast('Capaian maksimal 25 kata.', false);
     setBusy(button || $('[data-action="saveCapaian"]'), true, 'Menyimpan…');
-    try { await api('saveCapaian', { kode, kelas, teks }); safeMsg('c-status','Capaian tersimpan.',true); gradeDirty = false; }
+    try { await api('saveCapaian', { kode, kelas, teks, semester: $('#c-sem').value, tahunAjaran: $('#c-thn').value }); safeMsg('c-status','Capaian tersimpan.',true); gradeDirty = false; }
     catch (e) { safeMsg('c-status',e.message,false); }
     finally { setBusy(button || $('[data-action="saveCapaian"]'), false); }
   }
@@ -441,7 +842,7 @@
     let f; try { f=getGradeFilters(); } catch(e) { return toast(e.message,false); }
     const invalid=$$('#n-table-area .input-invalid'); if(invalid.length) { invalid[0].focus(); return toast('Nilai harus di antara 0 dan 100.',false); }
     if(!gradeDirty) return toast('Tidak ada perubahan nilai.',true);
-    if(!confirm('Simpan nilai '+f.mn+' untuk kelas '+f.k+'?')) return;
+    if(!await confirmBar('Simpan nilai ' + f.mn + ' untuk kelas ' + f.k + '?', 'Simpan Nilai')) return;
     const rows=readGradeRows(f); pendingSave=true; setBusy(button||$('[data-action="saveNilaiManual"]'),true,'Menyimpan…');
     try { const r=await api('saveNilaiSiswa',{rows}); safeMsg('n-status-m',r.saved+' nilai diproses; '+r.duplicatesRemoved+' duplikat dibersihkan.',true); gradeDirty=false; await loadDash(); }
     catch(e) { safeMsg('n-status-m',e.message,false); }
@@ -475,8 +876,17 @@
       if(problems.length) {
         renderUploadProblems(problems);
         if(problems.length>=parsed.length) throw new Error('Tidak ada baris valid untuk diupload.');
-        if(!confirm(problems.length+' masalah ditemukan. Tetap simpan '+parsed.length+' baris valid?\n\n'+problems.slice(0,10).join('\n'))) return;
-      } else if(!confirm('Simpan '+parsed.length+' baris nilai '+f.mn+' kelas '+f.k+'?')) return;
+        // Lepas state busy selama konfirmasi (spinner tak boleh berputar di balik bar).
+        setBusy(button||$('[data-action="uploadNilai"]'),false);
+        const ok = await confirmBar(problems.length+' masalah ditemukan. Tetap simpan '+parsed.length+' baris valid?\n\n'+problems.slice(0,10).join('\n'), 'Simpan yang Valid');
+        if(!ok) return;
+        setBusy(button||$('[data-action="uploadNilai"]'),true,'Menyimpan…');
+      } else {
+        setBusy(button||$('[data-action="uploadNilai"]'),false);
+        const ok = await confirmBar('Simpan '+parsed.length+' baris nilai '+f.mn+' kelas '+f.k+'?', 'Simpan Nilai');
+        if(!ok) return;
+        setBusy(button||$('[data-action="uploadNilai"]'),true,'Menyimpan…');
+      }
       const result=await api('saveNilaiSiswa',{rows:parsed});
       safeMsg('n-status-u',result.saved+' nilai tersimpan.',true); gradeDirty=false; await loadDash();
     } catch(e) { safeMsg('n-status-u',e.message,false); }
@@ -513,14 +923,43 @@
 
   // ------------------------------------------------------------ Extracurricular
   async function loadEkstra() {
-    const kelas=$('#e-kelas').value; if(!kelas) return;
+    const kelas = $('#e-kelas').value, semester = $('#e-sem').value, tahunAjaran = $('#e-thn').value;
+    if (!kelas) return;
     try {
-      const data=await api('getSiswaByKelas',{kelas});
-      const opts=(DATA.ekstrakurikuler||[]).map(e=>'<option value="'+esc(e[0])+'">'+esc(e[1])+'</option>').join('');
-      let html='<table class="data-table" style="min-width:720px"><thead><tr><th>Nama Siswa</th><th>Pilihan Ekstra 1</th><th class="center">Nilai</th><th>Pilihan Ekstra 2</th><th class="center">Nilai</th></tr></thead><tbody>';
-      data.forEach(r=>html+='<tr data-n="'+esc(r.nis)+'"><td class="font-semibold">'+esc(r.nama)+'</td><td><select class="e1"><option value="">-</option>'+opts+'</select></td><td class="center"><select class="v1"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td><td><select class="e2"><option value="">-</option>'+opts+'</select></td><td class="center"><select class="v2"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td></tr>');
-      $('#e-table').innerHTML=html+'</tbody></table></div>';
-    } catch(e) { $('#e-table').textContent=e.message; }
+      // Nilai TERSIMPAN ikut dimuat (Tahap 10) — sebelumnya hanya daftar siswa,
+      // sehingga form selalu tampil kosong walau datanya sudah ada di sheet.
+      const [data, saved] = await Promise.all([
+        api('getSiswaByKelas', { kelas }),
+        (semester && tahunAjaran) ? api('getNilaiEkstra', { kelas, semester, tahunAjaran }) : Promise.resolve([])
+      ]);
+      const byNis = {};
+      (saved || []).forEach(x => { byNis[x.nis] = x.items || []; });
+      const opts = (DATA.ekstrakurikuler || []).map(e => '<option value="' + esc(e[0]) + '">' + esc(e[1]) + '</option>').join('');
+      const vOpts = '<option value="">-</option><option>A</option><option>B</option><option>C</option>';
+      const pairCell = (items, i) => {
+        return '<td><select class="e' + (i + 1) + '"><option value="">-</option>' + opts + '</select></td>'
+             + '<td class="center"><select class="v' + (i + 1) + '" aria-label="Nilai ekstrakurikuler pilihan ' + (i + 1) + '">' + vOpts + '</select></td>';
+      };
+      let html = '<table class="data-table" style="min-width:720px"><thead><tr><th>Nama Siswa</th><th>Pilihan Ekstra 1</th><th class="center">Nilai</th><th>Pilihan Ekstra 2</th><th class="center">Nilai</th></tr></thead><tbody>';
+      data.forEach(r => {
+        const items = (byNis[r.nis] || []).slice(0, 2);
+        r.__items = items;
+        html += '<tr data-n="' + esc(r.nis) + '"><td class="font-semibold">' + esc(r.nama) + '</td>'
+             + pairCell(items, 0) + pairCell(items, 1) + '</tr>';
+      });
+      $('#e-table').innerHTML = html + '</tbody></table>';
+      // Setelah render: pilih option sesuai nilai tersimpan.
+      $$('#e-table tr[data-n]').forEach((row, idx) => {
+        const items = data[idx].__items || [];
+        [0, 1].forEach(i => {
+          if (!items[i]) return;
+          const eSel = row.querySelector('.e' + (i + 1)), vSel = row.querySelector('.v' + (i + 1));
+          if (eSel) eSel.value = items[i].kodeEkstra;
+          if (vSel) vSel.value = items[i].nilai;
+        });
+      });
+      safeMsg('e-status', data.length + ' siswa dimuat.', true);
+    } catch (e) { safeMsg('e-status', e.message, false); }   // jangan menimpa tabel
   }
   async function saveEkstra(button) {
     const semester=$('#e-sem').value,tahunAjaran=$('#e-thn').value;
@@ -538,7 +977,7 @@
   }
 
   // ------------------------------------------------------------ Nilai view tab
-  function switchNilaiView(mode) {
+  async function switchNilaiView(mode) {
     const manual=$('#view-manual'),upload=$('#view-upload');
     const isManual=mode==='m';
     manual.classList.toggle('hidden',!isManual); upload.classList.toggle('hidden',isManual);
@@ -547,10 +986,10 @@
     btnM.setAttribute('aria-selected',String(isManual)); btnU.setAttribute('aria-selected',String(!isManual));
     // Pindah tab berarti tinggalkan tabel — konfirmasi bila ada perubahan belum disimpan.
     if(gradeDirty && !isManual && !pendingSave){
-      if(!confirm('Ada nilai yang belum disimpan. Tetap pindah ke tab Upload Excel?')) {
+      const ok = await confirmBar('Ada nilai yang belum disimpan. Tetap pindah ke tab Upload Excel?');
+      if(!ok) {
         manual.classList.remove('hidden'); upload.classList.add('hidden');
         btnM.setAttribute('aria-selected','true'); btnU.setAttribute('aria-selected','false');
-        return;
       }
     }
   }
@@ -569,12 +1008,24 @@
         const card=document.createElement('div');card.className='status-card';
         const title=document.createElement('div');title.className='status-card-head';
         const label=document.createElement('span');label.textContent='Kelas '+k;title.appendChild(label);
-        const total=(data[k]||[]).length, lengkap=(data[k]||[]).filter(x=>x.status==='Lengkap').length;
-        const pct=document.createElement('span');pct.className='badge '+(lengkap===total?'badge-ok':lengkap?'badge-warn':'badge-bad');
+        const items=(data[k]||[]);
+        const total=items.length, lengkap=items.filter(x=>x.status==='Lengkap').length;
+        const pct=document.createElement('span');pct.className='badge '+(lengkap===total&&total?'badge-ok':lengkap?'badge-warn':'badge-bad');
         pct.textContent=lengkap+'/'+total;title.appendChild(pct);
         card.appendChild(title);
         const ul=document.createElement('ul');
-        (data[k]||[]).forEach(item=>{const li=document.createElement('li');li.className='status-row';const name=document.createElement('span');name.className='name';name.textContent=item.mapel;const badge=document.createElement('span');badge.className='badge '+(item.status==='Lengkap'?'badge-ok':'badge-bad');badge.textContent=item.status;li.append(name,badge);ul.appendChild(li);});
+        items.forEach(item=>{
+          const li=document.createElement('li');li.className='status-row';
+          const name=document.createElement('span');name.className='name';name.textContent=item.mapel;
+          const badge=document.createElement('span');
+          // 3-kondisi (Tahap 10): Sebagian = sebagian siswa sudah terisi → kuning.
+          badge.className='badge '+(item.status==='Lengkap'?'badge-ok':item.status==='Sebagian'?'badge-warn':'badge-bad');
+          badge.textContent=item.status;
+          const detail=document.createElement('span');
+          detail.style.cssText='font-size:.7rem;color:var(--ink-3)';
+          detail.textContent=(item.terisi??0)+'/'+(item.total??0);
+          li.append(name,badge,detail);ul.appendChild(li);
+        });
         card.appendChild(ul);area.appendChild(card);
       });
     } catch(e) { $('#s-area').textContent=e.message; }
@@ -628,7 +1079,7 @@
     const withSignature=$('#r-ttd').checked;
     const count=await api('getSiswaByKelas',{kelas}).then(x=>x.length).catch(e=>{toast(e.message,false);return 0;});
     if(!count) return;
-    if(!confirm('Akan dibuat '+count+' PDF untuk seluruh kelas '+kelas+' (bukan hanya siswa di preview). Lanjutkan?')) return;
+    if(!await confirmBar('Akan dibuat '+count+' PDF untuk seluruh kelas '+kelas+' (bukan hanya siswa di preview). Lanjutkan?', 'Cetak Semua')) return;
     setBusy(button||$('[data-action="bulkPrint"]'),true,'Membuat '+count+' PDF…');
     try {
       const result=await api('generateAllPdf',{kelas,semester,tahunAjaran,jenisRapor,withSignature},{timeout:360000});
@@ -637,6 +1088,244 @@
       if(result.errors&&result.errors.length) console.warn('Kesalahan cetak PDF:',result.errors);
     } catch(e) { toast(e.message,false); }
     finally { setBusy(button||$('[data-action="bulkPrint"]'),false); }
+  }
+
+  // ------------------------------------------------- Arsip periode (Tahap 9)
+  /** Isi filter halaman Arsip: kelas sesuai scope peran + periode bebas. */
+  function archiveOptions() {
+    let classes = DATA.kelas || [];
+    if (USER.role === 'Wali Kelas' && USER.waliKelasOf) classes = [USER.waliKelasOf];
+    const kelas = $('#ar-kelas');
+    // Cetak rapor arsip hanya Admin/Wali Kelas (gerbang server tetap assertClassAccess_;
+    // menyembunyikan blok ini murni UX — otoritas tetap di server).
+    $('#ar-print-card')?.classList.toggle('hidden', !(USER.role === 'Admin' || USER.role === 'Wali Kelas'));
+    if (kelas) {
+      setOptions(kelas, classes);
+      if (USER.role === 'Wali Kelas' && USER.waliKelasOf) { kelas.value = USER.waliKelasOf; kelas.disabled = true; }
+      else kelas.disabled = false;
+      // Preselect kelas pertama — konsisten dengan popDrops() halaman input,
+      // supaya tab Arsip langsung berisi daftar siswa (bukan pilih manual dulu).
+      if (!kelas.value && classes.length) kelas.value = classes[0];
+    }
+    const tersedia = (DATA.periode || {}).tersedia || [];   // [{semester, tahunAjaran}]
+    // Pasangan opsi [sem, tahun] untuk mengisi dropdown (fallback: PERIOD_OPTIONS).
+    const pairs = tersedia.map(x => [x.semester, x.tahunAjaran]);
+    const free = pairs.length ? pairs : PERIOD_OPTIONS.map(x => [x[0], x[1]]);
+    const sem = $('#ar-sem'), thn = $('#ar-thn');
+    if (sem) setOptions(sem, [...new Set(free.map(x => x[0]))]);
+    if (thn) setOptions(thn, [...new Set(free.map(x => x[1]))]);
+    // Default berbeda dari periode aktif bila memungkinkan (arsip = periode lama).
+    const aktif = (DATA.periode || {}).aktif;
+    if (sem && thn && free.length) {
+      const lain = tersedia.find(x => aktif && !(x.semester === aktif.semester && x.tahunAjaran === aktif.tahunAjaran));
+      const chosen = lain || tersedia[0];
+      if (chosen) { sem.value = chosen.semester; thn.value = chosen.tahunAjaran; }
+      if (sem.value && thn.value) return void (kelas && kelas.value && loadArchiveStudents(kelas.value));
+      // Tidak ada `tersedia` sama sekali → pakai fallback pertama agar tidak kosong.
+      sem.value = sem.value || free[0][0]; thn.value = thn.value || free[0][1];
+    }
+    if (kelas && kelas.value) loadArchiveStudents(kelas.value);
+  }
+  /** Daftar siswa untuk cetak rapor arsip (baca saja). */
+  async function loadArchiveStudents(kelas) {
+    const sel = $('#ar-r-siswa');
+    if (!kelas || !sel) { if (sel) setOptions(sel, []); return; }
+    try {
+      const data = await api('getSiswaByKelas', { kelas });
+      setOptions(sel, data.map(s => [s.nis, s.nama]), '-Pilih Siswa-');
+    } catch (e) { toast(e.message, false); }
+  }
+  /** Muat tabel nilai arsip (read-only, tanpa satu pun input). */
+  async function loadArchive(button) {
+    const kelas = $('#ar-kelas').value, semester = $('#ar-sem').value, tahunAjaran = $('#ar-thn').value;
+    if (!kelas || !semester || !tahunAjaran) return safeMsg('ar-status', 'Pilih kelas dan periode terlebih dahulu.', false);
+    setBusy(button || $('[data-action="loadArchive"]'), true, 'Memuat...');
+    try {
+      const d = await api('getArchiveNilai', { kelas, semester, tahunAjaran });
+      renderArchive(d);
+      safeMsg('ar-status', 'Arsip dimuat - ' + d.siswa.length + ' siswa, ' + d.mapel.length + ' mata pelajaran.', true);
+      if (kelas) loadArchiveStudents(kelas);
+    } catch (e) { safeMsg('ar-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="loadArchive"]'), false); }
+  }
+  /** Render tabel arsip - semuanya textContent, tidak ada kontrol yang bisa diedit. */
+  function renderArchive(d) {
+    const summary = $('#ar-summary');
+    summary.replaceChildren();
+    const left = document.createElement('div');
+    const name = document.createElement('p'); name.className = 'who'; name.textContent = 'Kelas ' + d.kelas;
+    const meta = document.createElement('p'); meta.className = 'meta';
+    meta.textContent = 'Arsip ' + d.semester + ' / ' + d.tahunAjaran;
+    // Rumus ditulis eksplisit — perhitungan klien tidak boleh terlihat "misterius"
+    // apalagi beda dengan rapor (jenis rapor memilih rumus berbeda di server).
+    const note = document.createElement('p'); note.className = 'meta';
+    note.textContent = 'Nilai akhir = (4 × rata-rata UH + STS) / 5 (tengah semester).';
+    left.append(name, meta, note);
+    const right = document.createElement('div'); right.className = 'period';
+    right.innerHTML = '<span class="badge badge-neutral">ARSIP - HANYA BACA</span>';
+    summary.append(left, right);
+    summary.classList.remove('hidden');
+
+    const head = $('#ar-table-head'), body = $('#ar-table-body');
+    head.replaceChildren(); body.replaceChildren();
+    // Komponen nilai diperlihatkan apa adanya (bukan hasil hitung tersembunyi):
+    // UH (rata-rata), STS, SAS, lalu nilai akhir.
+    const cell = (parent, text, cls) => {
+      const td = document.createElement('td'); if (cls) td.className = cls;
+      td.textContent = text; parent.appendChild(td); return td;
+    };
+    const score = (v) => (v === '' || v === null || v === undefined || !Number.isFinite(Number(v))) ? '-' : String(Number(v));
+    const hasSas = d.siswa.some(s => d.mapel.some(m => score(s.nilai[m.kode]?.sas) !== '-'));
+    const cols = hasSas ? 4 : 3;
+    const hr = document.createElement('tr');
+    const thNis = document.createElement('th'); thNis.rowSpan = 2; thNis.textContent = 'NIS';
+    const thNama = document.createElement('th'); thNama.rowSpan = 2; thNama.textContent = 'Nama Siswa';
+    hr.append(thNis, thNama);
+    d.mapel.forEach(m => { const th = document.createElement('th'); th.className = 'center'; th.colSpan = cols; th.textContent = m.nama; hr.appendChild(th); });
+    const hr2 = document.createElement('tr');
+    d.mapel.forEach(() => {
+      ['UH', 'STS'].concat(hasSas ? ['SAS'] : []).concat(['Akhir']).forEach(label => {
+        const th = document.createElement('th'); th.className = 'center'; th.textContent = label; hr2.appendChild(th);
+      });
+    });
+    head.append(hr, hr2);
+    const colSpan = 2 + d.mapel.length * cols;
+    if (!d.siswa.length) {
+      const tr = document.createElement('tr'); const td = document.createElement('td');
+      td.colSpan = colSpan; td.className = 'empty-state'; td.textContent = 'Tidak ada siswa di kelas ini.';
+      tr.appendChild(td); body.appendChild(tr);
+    }
+    d.siswa.forEach(s => {
+      const tr = document.createElement('tr');
+      const tdNis = document.createElement('td'); tdNis.className = 'font-semibold'; tdNis.textContent = s.nis;
+      const tdNama = document.createElement('td'); tdNama.textContent = s.nama;
+      tr.append(tdNis, tdNama);
+      d.mapel.forEach(m => {
+        const v = s.nilai[m.kode];
+        const uhs = v ? [v.uh1, v.uh2, v.uh3, v.uh4, v.uh5].map(Number).filter(n => Number.isFinite(n) && n > 0) : [];
+        const avgRaw = uhs.length ? uhs.reduce((a, b) => a + b, 0) / uhs.length : null;
+        cell(tr, avgRaw === null ? '-' : String(Math.round(avgRaw)), 'center');
+        cell(tr, v ? score(v.sts) : '-', 'center');
+        if (hasSas) cell(tr, v ? score(v.sas) : '-', 'center');
+        let akhir = '';
+        if (v) {
+          const sts = Number(v.sts) || 0;
+          // Rumus & pembulatan identik dengan getRaportData_ — pakai avg belum
+          // dibulatkan supaya hasil persis sama dengan nilai di rapor.
+          akhir = (avgRaw && sts) ? Math.round((4 * avgRaw + sts) / 5) : (avgRaw || sts || '');
+        }
+        cell(tr, akhir === '' ? '-' : String(akhir), 'center font-semibold');
+      });
+      body.appendChild(tr);
+    });
+    $('#ar-table-wrap').classList.remove('hidden');
+  }
+  /** Preview rapor periode arsip - struktur sama dengan previewRapor, tetapi
+   *  membaca filter ARSIP (#ar-*), bukan periode aktif. */
+  async function archivePreview(button) {
+    const nis = $('#ar-r-siswa').value;
+    const semester = $('#ar-sem').value, tahunAjaran = $('#ar-thn').value, jenisRapor = $('#ar-jenis').value;
+    if (!nis || !semester || !tahunAjaran) return safeMsg('ar-print-status', 'Pilih siswa dan periode arsip.', false);
+    setBusy(button || $('[data-action="archivePreview"]'), true, 'Mengambil preview...');
+    try {
+      const d = await api('getRaportData', { nis, semester, tahunAjaran, jenisRapor });
+      CURRENT_RAPOR_DATA = d;
+      const area = $('#ar-preview'); area.replaceChildren();
+      const summary = document.createElement('div'); summary.className = 'preview-summary';
+      const left = document.createElement('div');
+      const nm = document.createElement('p'); nm.className = 'who'; nm.textContent = d.siswa.nama;
+      const meta = document.createElement('p'); meta.className = 'meta';
+      meta.textContent = 'NIS: ' + d.siswa.nis + '  /  Kelas: ' + d.siswa.kelas + '  /  Arsip (hanya baca)';
+      left.append(nm, meta);
+      const right = document.createElement('div'); right.className = 'period';
+      right.textContent = d.meta.sem + ' / ' + d.meta.thn + ' / ' + d.meta.jenis;
+      summary.append(left, right); area.appendChild(summary);
+      const table = document.createElement('table'); table.className = 'data-table mb-5';
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr><th>Mata Pelajaran</th><th class="center" style="width:8rem">Nilai Akhir</th><th>Deskripsi Capaian</th></tr>';
+      const tbody = document.createElement('tbody');
+      (d.nilai || []).forEach(n => {
+        const tr = document.createElement('tr');
+        [n.mapel, n.nilai, n.capaian].forEach((v, i) => {
+          const td = document.createElement('td');
+          td.className = (i === 1 ? 'center font-bold text-lg text-[#B06161]' : i === 0 ? 'font-semibold' : 'text-xs text-gray-600 leading-relaxed');
+          td.textContent = v; tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.append(thead, tbody); area.appendChild(table);
+      const sign = document.createElement('label'); sign.className = 'sign-check';
+      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.id = 'ar-ttd';
+      sign.append(checkbox, document.createTextNode('Tampilkan Tanda Tangan Wali Kelas (' + d.waliKelas + ')'));
+      area.appendChild(sign);
+      const one = document.createElement('button'); one.type = 'button'; one.className = 'btn-primary btn-block';
+      one.dataset.action = 'archivePrint';
+      one.innerHTML = '<i class="fas fa-file-pdf mr-2" aria-hidden="true"></i> Buat & Buka PDF Rapor Arsip';
+      area.appendChild(one);
+      const all = document.createElement('button'); all.type = 'button'; all.className = 'btn-secondary btn-block mt-3';
+      all.dataset.action = 'archiveBulkPrint';
+      all.innerHTML = '<i class="fas fa-copy mr-2" aria-hidden="true"></i> Cetak Semua Rapor Kelas ' + esc(d.siswa.kelas) + ' periode ini';
+      area.appendChild(all);
+      area.classList.remove('hidden');
+      safeMsg('ar-print-status', 'Preview periode arsip siap.', true);
+    } catch (e) { safeMsg('ar-print-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="archivePreview"]'), false); }
+  }
+  /** Buat PDF satu siswa untuk periode arsip (menulis file BARU ke Drive). */
+  async function archivePrint(button) {
+    if (!CURRENT_RAPOR_DATA) return safeMsg('ar-print-status', 'Ambil preview terlebih dahulu.', false);
+    const data = CURRENT_RAPOR_DATA;
+    const withSignature = $('#ar-ttd') ? $('#ar-ttd').checked : false;
+    setBusy(button || $('[data-action="archivePrint"]'), true, 'Membuat PDF...');
+    try {
+      const result = await api('generatePdf', {
+        nis: data.siswa.nis, semester: data.meta.sem, tahunAjaran: data.meta.thn,
+        jenisRapor: data.meta.jenis, withSignature: withSignature
+      });
+      if (!result.url) throw new Error('Server tidak mengembalikan URL PDF.');
+      window.open(result.url, '_blank', 'noopener');
+      safeMsg('ar-print-status', 'PDF arsip dibuat.', true);
+    } catch (e) { safeMsg('ar-print-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="archivePrint"]'), false); }
+  }
+  /** Buat PDF seluruh kelas untuk periode arsip. */
+  async function archiveBulkPrint(button) {
+    const kelas = $('#ar-kelas').value, semester = $('#ar-sem').value, tahunAjaran = $('#ar-thn').value;
+    const jenisRapor = $('#ar-jenis').value;
+    if (!kelas || !semester || !tahunAjaran) return safeMsg('ar-print-status', 'Pilih kelas dan periode.', false);
+    const withSignature = $('#ar-ttd') ? $('#ar-ttd').checked : false;
+    setBusy(button || $('[data-action="archiveBulkPrint"]'), true, 'Membuat PDF...');
+    try {
+      const result = await api('generateAllPdf', { kelas, semester, tahunAjaran, jenisRapor, withSignature }, { timeout: 360000 });
+      safeMsg('ar-print-status', result.generated + ' berhasil, ' + result.failed + ' gagal.', true);
+      if (result.url) window.open(result.url, '_blank', 'noopener');
+      if (result.errors && result.errors.length) console.warn('Kesalahan cetak PDF:', result.errors);
+    } catch (e) { safeMsg('ar-print-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="archiveBulkPrint"]'), false); }
+  }
+
+  // ------------------------------------------- Periode aktif (Operator/Admin)
+  async function setActivePeriod(button) {
+    const semester = $('#ap-sem').value, tahunAjaran = $('#ap-thn').value;
+    if (!semester || !tahunAjaran) return safeMsg('ap-status', 'Pilih semester dan tahun ajaran.', false);
+    const aktif = (DATA.periode || {}).aktif;
+    if (aktif && aktif.semester === semester && aktif.tahunAjaran === tahunAjaran) {
+      return safeMsg('ap-status', 'Periode itu sudah aktif.', false);
+    }
+    const before = aktif ? aktif.semester + ' ' + aktif.tahunAjaran : '(belum ditetapkan)';
+    const pesan = 'Jadikan ' + semester + ' ' + tahunAjaran + ' sebagai periode aktif?\n\n'
+      + 'Sebelumnya: ' + before + '\nSeluruh guru & wali kelas akan menulis ke periode baru mulai sekarang; '
+      + 'periode lain berubah jadi arsip (hanya baca).';
+    if (!await confirmBar(pesan, 'Jadikan Periode Aktif')) return;
+    setBusy(button || $('[data-action="setActivePeriod"]'), true, 'Menyimpan...');
+    try {
+      const r = await api('setActivePeriod', { semester, tahunAjaran });
+      DATA.periode = DATA.periode || {};
+      DATA.periode.aktif = r.aktif;
+      applyPeriods();
+      safeMsg('ap-status', 'Periode aktif: ' + r.aktif.semester + ' ' + r.aktif.tahunAjaran + '. Berlaku untuk semua pengguna.', true);
+    } catch (e) { safeMsg('ap-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="setActivePeriod"]'), false); }
   }
 
   // ------------------------------------------------------------ Password
@@ -691,14 +1380,20 @@
       const body = $('#w-table-body'); body.replaceChildren();
       if (!data.length) {
         const tr = document.createElement('tr'); const td = document.createElement('td');
-        td.colSpan = 5; td.className = 'empty-state'; td.textContent = 'Belum ada siswa.';
+        td.colSpan = 6; td.className = 'empty-state'; td.textContent = 'Belum ada siswa.';
         tr.appendChild(td); body.appendChild(tr); return;
       }
       data.forEach(s => {
         const tr = document.createElement('tr');
         tr.dataset.siswaNis = s.nis; // sengaja BUKAN data-nis (hindari tabrakan selector tabel nilai)
         const cell = (v, cls) => { const td = document.createElement('td'); td.className = cls || ''; td.textContent = v; return td; };
+        const lulus = String(s.status || 'Aktif').toUpperCase() === 'LULUS';
         tr.append(cell(s.nis, 'font-semibold'), cell(s.nisn, 'text-gray-500'), cell(s.nama), cell(s.kelas || '—', 'center'));
+        const st = document.createElement('td'); st.className = 'center';
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + (lulus ? 'badge-neutral' : 'badge-ok');
+        badge.textContent = lulus ? 'Lulus' : 'Aktif';
+        st.appendChild(badge); tr.appendChild(st);
         const act = document.createElement('td'); act.className = 'center';
         const btn = document.createElement('button');
         btn.type = 'button'; btn.dataset.action = 'editSiswa'; btn.dataset.nis = s.nis;
@@ -743,6 +1438,96 @@
       resetSiswaForm(); await loadSiswaList();
     } catch (e) { safeMsg('w-status', e.message, false); }
     finally { setBusy(button || $('[data-action="saveSiswa"]'), false); }
+  }
+
+  // ---------------------------------------------- Operator: promosi kelas
+  function promotionOptions() {
+    const classes = DATA.kelas || [];
+    const asal = $('#pr-asal'); if (asal) setOptions(asal, classes, '-Pilih Kelas Asal-');
+    const tujuan = $('#pr-tujuan');
+    if (tujuan) {
+      setOptions(tujuan, classes, '-Pilih Tujuan-');
+      const opt = document.createElement('option');
+      opt.value = 'Lulus'; opt.textContent = 'Lulus (tandai kelulusan)';
+      tujuan.appendChild(opt);
+    }
+  }
+  async function previewPromotion(button) {
+    const asal = $('#pr-asal').value, tujuan = $('#pr-tujuan').value;
+    if (!asal || !tujuan) return safeMsg('pr-status', 'Pilih kelas asal dan tujuan terlebih dahulu.', false);
+    if (tujuan === asal) return safeMsg('pr-status', 'Kelas tujuan sama dengan kelas asal.', false);
+    setBusy(button || $('[data-action="previewPromotion"]'), true, 'Menyiapkan pratinjau…');
+    try {
+      const data = await api('getSiswaList', { kelas: asal });
+      const body = $('#pr-table-body'); body.replaceChildren();
+      const toLulus = tujuan.toUpperCase() === 'LULUS';
+      let aktif = 0, lulus = 0;
+      if (!data.length) {
+        const tr = document.createElement('tr'); const td = document.createElement('td');
+        td.colSpan = 5; td.className = 'empty-state'; td.textContent = 'Tidak ada siswa di kelas ini.';
+        tr.appendChild(td); body.appendChild(tr);
+      }
+      data.forEach(s => {
+        const isLulus = String(s.status || 'Aktif').toUpperCase() === 'LULUS';
+        isLulus ? lulus++ : aktif++;
+        const tr = document.createElement('tr');
+        tr.dataset.prNis = s.nis;
+        tr.dataset.prLulus = isLulus ? '1' : '0';
+        const cell = (v, cls) => { const td = document.createElement('td'); td.className = cls || ''; td.textContent = v; return td; };
+        const pick = document.createElement('td'); pick.className = 'center';
+        if (!isLulus) {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.checked = true; cb.dataset.prPick = '1';
+          cb.setAttribute('aria-label', 'Ikut promosi — ' + s.nama);
+          cb.addEventListener('change', updatePromotionSummary);
+          pick.appendChild(cb);
+        } else {
+          pick.textContent = '—';
+        }
+        tr.append(pick, cell(s.nis), cell(s.nama), cell(asal), cell(isLulus ? 'Lulus' : 'Aktif', 'center'));
+        body.appendChild(tr);
+      });
+      $('#pr-preview').classList.remove('hidden');
+      updatePromotionSummary();
+      safeMsg('pr-status', 'Pratinjau siap. Hilangkan centang untuk mengecualikan siswa.', true);
+    } catch (e) { safeMsg('pr-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="previewPromotion"]'), false); }
+  }
+  function updatePromotionSummary() {
+    const rows = [...document.querySelectorAll('#pr-table-body tr[data-pr-nis]')];
+    const aktif = rows.filter(r => r.dataset.prLulus === '0');
+    const pilih = aktif.filter(r => { const cb = r.querySelector('input'); return cb && cb.checked; });
+    const toLulus = ($('#pr-tujuan').value || '').toUpperCase() === 'LULUS';
+    $('#pr-summary').textContent =
+      'Kelas ' + ($('#pr-asal').value || '?') + ' → ' + ($('#pr-tujuan').value || '?') +
+      ' · aktif: ' + aktif.length +
+      ' · ikut: ' + pilih.length +
+      ' · dikecualikan: ' + (aktif.length - pilih.length) +
+      ' · sudah lulus: ' + (rows.length - aktif.length) +
+      (toLulus ? ' · NIS & kelas tidak berubah' : ' · NIS tidak berubah');
+  }
+  async function commitPromotion(button) {
+    const asal = $('#pr-asal').value, tujuan = $('#pr-tujuan').value;
+    const rows = [...document.querySelectorAll('#pr-table-body tr[data-pr-nis]')];
+    if (!rows.length) return safeMsg('pr-status', 'Jalankan Pratinjau terlebih dahulu.', false);
+    const aktif = rows.filter(r => r.dataset.prLulus === '0');
+    const ikut = aktif.filter(r => { const cb = r.querySelector('input'); return cb && cb.checked; }).map(r => r.dataset.prNis);
+    const exclude = aktif.filter(r => !ikut.includes(r.dataset.prNis)).map(r => r.dataset.prNis);
+    if (!ikut.length) return safeMsg('pr-status', 'Tidak ada siswa yang dipilih.', false);
+    const ke = tujuan === 'Lulus' ? 'ditandai LULUS (kelas & NIS tetap)' : 'dipindah ke kelas ' + tujuan;
+    const pesan = 'Kelas ' + asal + ': ' + ikut.length + ' siswa ' + ke + '.\n' +
+      'Dikecualikan: ' + exclude.length + ' · sudah lulus: ' + (rows.length - aktif.length) + '.\n\n' +
+      'NIS tidak berubah, jadi nilai & absensi tetap terhubung.\n' +
+      'Cetak rapor periode lama SEBELUM melanjutkan.\n\nLanjutkan?';
+    if (!await confirmBar(pesan, 'Jalankan Promosi')) return;
+    setBusy(button || $('[data-action="commitPromotion"]'), true, 'Memproses…');
+    try {
+      const r = await api('promoteClassStudents', { kelasAsal: asal, tujuan, exclude });
+      safeMsg('pr-status', r.diproses + ' diproses, ' + r.dikecualikan + ' dikecualikan, ' + r.sudahLulus + ' sudah lulus.', true);
+      $('#pr-preview').classList.add('hidden');
+      await loadSiswaList();
+    } catch (e) { safeMsg('pr-status', e.message, false); }
+    finally { setBusy(button || $('[data-action="commitPromotion"]'), false); }
   }
 
   // ------------------------------------------------ Operator: akun & role
@@ -791,7 +1576,7 @@
   async function resetAccountFlag(button) {
     const username = $('#ak-username').value.trim();
     if (!username) return safeMsg('ak-status', 'Isi akun target.', false);
-    if (!confirm('Tandai akun "' + username + '" wajib ganti password saat login berikutnya?')) return;
+    if (!await confirmBar('Tandai akun "' + username + '" wajib ganti password saat login berikutnya?', 'Tandai')) return;
     setBusy(button || $('[data-action="resetAccountFlag"]'), true, 'Menandai…');
     try { await api('resetAccount', { username, mode: 'flag' }); safeMsg('ak-status', 'Akun ditandai wajib reset.', true); await loadAccounts(); }
     catch (e) { safeMsg('ak-status', e.message, false); }
@@ -802,7 +1587,7 @@
     const temp = $('#ak-temp').value.trim();
     if (!username) return safeMsg('ak-status', 'Isi akun target.', false);
     if (temp.length < 10) return safeMsg('ak-status', 'Password sementara minimal 10 karakter.', false);
-    if (!confirm('Setel password sementara untuk "' + username + '"? Password tampil sekali — salin sekarang.')) return;
+    if (!await confirmBar('Setel password sementara untuk "' + username + '"? Password tampil sekali — salin sekarang.', 'Setel Password')) return;
     setBusy(button || $('[data-action="resetAccountTemp"]'), true, 'Menyetel…');
     try {
       const r = await api('resetAccount', { username, mode: 'temporary', temporaryPassword: temp });
@@ -872,6 +1657,62 @@
     card.appendChild(ul);
     return card;
   }
+  /** Grup mapel: SATU baris agregat per mapel + rincian per kelas yang SELALU
+   *  terlihat di bawahnya (tanpa tombol lipat — keputusan desain pemilik). */
+  function progressSubjectGroup(title, items) {
+    const card = document.createElement('div'); card.className = 'status-card';
+    const head = document.createElement('div'); head.className = 'status-card-head';
+    const t = document.createElement('span'); t.textContent = title; head.appendChild(t); card.appendChild(head);
+    const ul = document.createElement('ul');
+    items.forEach(m => {
+      const li = document.createElement('li');
+      li.style.cssText = 'padding:.55rem 1rem;border-bottom:1px solid #F0EFED';
+      // baris agregat
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:.75rem';
+      const left = document.createElement('div');
+      const name = document.createElement('span'); name.className = 'name'; name.textContent = m.nama;
+      const code = document.createElement('span');
+      code.style.cssText = 'font-size:.7rem;color:var(--ink-3);margin-left:.5rem';
+      code.textContent = m.kode;
+      left.append(name, code);
+      const right = document.createElement('div');
+      right.style.cssText = 'display:flex;align-items:center;gap:.5rem';
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + (m.persen === 100 ? 'badge-ok' : m.persen >= 70 ? 'badge-warn' : 'badge-bad');
+      badge.textContent = m.persen + '%';
+      const detail = document.createElement('span');
+      detail.style.cssText = 'font-size:.72rem;color:var(--ink-3)';
+      detail.textContent = m.terisi + '/' + m.total;
+      right.append(badge, detail);
+      row.append(left, right);
+      li.appendChild(row);
+      // rincian per kelas — selalu terlihat
+      const list = document.createElement('ul');
+      list.style.cssText = 'list-style:none;margin:.35rem 0 0;padding:0 0 0 .9rem;border-left:2px solid var(--border)';
+      (m.perKelas || []).forEach(pk => {
+        const sub = document.createElement('li');
+        sub.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.15rem 0;font-size:.75rem;color:var(--ink-2)';
+        const kl = document.createElement('span'); kl.textContent = pk.kelas;
+        const rightSub = document.createElement('span');
+        rightSub.style.cssText = 'display:flex;align-items:center;gap:.5rem';
+        const b = document.createElement('span');
+        b.className = 'badge ' + (pk.persen === 100 ? 'badge-ok' : pk.persen >= 70 ? 'badge-warn' : 'badge-bad');
+        b.style.fontSize = '.6rem';
+        b.textContent = pk.persen + '%';
+        const d = document.createElement('span');
+        d.style.cssText = 'font-size:.7rem;color:var(--ink-3)';
+        d.textContent = pk.terisi + '/' + pk.total;
+        rightSub.append(b, d);
+        sub.append(kl, rightSub);
+        list.appendChild(sub);
+      });
+      li.appendChild(list);
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+    return card;
+  }
   async function loadProgressSummary(button) {
     const semester = $('#sum-sem').value, tahunAjaran = $('#sum-thn').value;
     if (!semester || !tahunAjaran) return toast('Pilih semester dan tahun.', false);
@@ -880,9 +1721,24 @@
       const d = await api('getProgressSummary', { semester, tahunAjaran });
       const area = $('#sum-area'); area.replaceChildren();
       if (!d.kelas.length && !d.mapel.length && !d.guru.length) { area.textContent = 'Belum ada data untuk periode ini.'; return; }
+      // Ringkasan keseluruhan (sel terisi / sel mungkin) di atas.
+      if (d.ringkas && d.ringkas.total >= 0) {
+        const box = document.createElement('div');
+        box.className = 'stat-card';
+        box.style.marginBottom = '1rem';
+        const lbl = document.createElement('p'); lbl.className = 'label'; lbl.textContent = 'Rekap Seluruh Kelas';
+        const val = document.createElement('p'); val.className = 'value';
+        val.textContent = d.ringkas.persen + '%';
+        const det = document.createElement('p');
+        det.style.cssText = 'font-size:.75rem;color:var(--ink-3);margin:.2rem 0 0';
+        det.textContent = d.ringkas.terisi + ' dari ' + d.ringkas.total + ' sel terisi' +
+          (d.ringkas.unmatched ? ' · ' + d.ringkas.unmatched + ' baris nilai di luar hitungan' : '');
+        box.append(lbl, val, det);
+        area.appendChild(box);
+      }
       area.append(
         progressGroup('Per Kelas', d.kelas, 'kelas'),
-        progressGroup('Per Mata Pelajaran', d.mapel, 'nama', 'kode'),
+        progressSubjectGroup('Per Mata Pelajaran', d.mapel),
         progressGroup('Per Guru', d.guru, 'username', 'mapel')
       );
     } catch (e) { toast(e.message, false); }

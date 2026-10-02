@@ -22,7 +22,7 @@
   // mengedit source (mis. ditanam oleh GitHub Actions).
   // ---------------------------------------------------------------------------
   var CONFIG = {
-    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbxKPpR3E0IjGGJzBaUQSCG_r7EVm7uqfwRE6J7BwQvCTXdBpA2RvaWmnE1QPywfYFGSlQ/exec',
+    apiUrl: global.ERAPOR_API_URL || '',
     mode: 'direct' // 'direct' | 'proxy'
   };
 
@@ -98,7 +98,10 @@
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timeout = setTimeout(function () { if (controller) controller.abort(); }, opts.timeout || 60000);
 
-    spin(true);
+    // opts.silent: lewati spinner global. Dipakai request boot (layar progres
+    // bertahap sudah memberi umpan balik) supaya overlay tidak berkedip dobel.
+    var silent = !!opts.silent;
+    if (!silent) spin(true);
     return fetch(endpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
@@ -131,7 +134,7 @@
       })
       .finally(function () {
         clearTimeout(timeout);
-        spin(false);
+        if (!silent) spin(false);
       });
   }
 
