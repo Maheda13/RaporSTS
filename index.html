@@ -10,7 +10,7 @@
     <script>
       // Ganti URL setelah deployment — lihat DEPLOYMENT.md.
       // Kosongkan bila backend masih dilayani Apps Script.
-      window.ERAPOR_API_URL = 'https://script.google.com/macros/s/AKfycbyzGxOOszOUvDx-KaeoqsXfEdJs1cWfb4eEeMSLde5xauQIZ_h8QBcYg_MuJ-Hc6hc3MA/exec';
+      window.ERAPOR_API_URL = window.ERAPOR_API_URL || '';
     </script>
 
     <!-- Libraries (tanpa jQuery & Chart.js — keduanya tidak terpakai) -->
@@ -26,31 +26,30 @@
     <div id="global-status" class="sr-only" role="status" aria-live="polite"></div>
 
     <!-- ================= LOGIN ================= -->
-    <div id="login-view" class="min-h-screen flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-xl shadow-xl w-full max-w-md border border-gray-200">
-            <div class="text-center mb-8">
-                <h2 class="text-3xl font-bold text-[#B06161]">eRapor DAFI</h2>
-                <p class="text-gray-500 font-medium mt-1">Sistem Penilaian Terpadu</p>
-            </div>
+    <div id="login-view" class="auth-shell">
+        <div class="auth-card">
+            <div class="auth-mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></div>
+            <h1 class="auth-title">eRapor DAFI</h1>
+            <p class="auth-sub">Sistem Penilaian Terpadu SMP-MA DAFI</p>
 
-            <div id="login-error" role="alert" class="hidden bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded mb-6 text-sm font-bold"></div>
+            <div id="login-error" role="alert" class="inline-msg err hidden mb-5"></div>
 
-            <form class="space-y-6" onsubmit="event.preventDefault(); handleLogin();">
+            <form class="space-y-5" onsubmit="event.preventDefault(); handleLogin();">
                 <div>
-                    <label for="username-input" class="block text-sm font-bold text-gray-700 mb-1">Username</label>
+                    <label for="username-input" class="field-label">Username</label>
                     <input type="text" id="username-input" class="input-field" placeholder="Masukkan username" autocomplete="username">
                 </div>
                 <div>
-                    <label for="password-input" class="block text-sm font-bold text-gray-700 mb-1">Password</label>
+                    <label for="password-input" class="field-label">Password</label>
                     <div class="relative">
-                        <input type="password" id="password-input" class="input-field pr-12" placeholder="Masukkan password" autocomplete="current-password">
+                        <input type="password" id="password-input" class="input-field with-action" placeholder="Masukkan password" autocomplete="current-password">
                         <button type="button" id="toggle-login-password" aria-label="Tampilkan password" aria-pressed="false"
-                                class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-[#B06161]">
+                                class="icon-btn absolute inset-y-0 right-0 h-full w-11 rounded-l-none rounded-r-[.625rem]">
                             <i class="fas fa-eye" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
-                <button type="submit" data-action="login" class="w-full btn-primary text-lg mt-2 font-bold shadow-md">
+                <button type="submit" data-action="login" class="w-full btn-primary mt-3" style="min-height:48px">
                     MASUK
                 </button>
             </form>
@@ -58,126 +57,147 @@
     </div>
 
     <!-- ============ RESET PASSWORD (paksa-reset Tahap 2) ============ -->
-    <div id="reset-view" class="min-h-screen flex items-center justify-center p-4 hidden">
-        <div class="bg-white p-8 rounded-xl shadow-xl w-full max-w-md border border-gray-200">
-            <div class="text-center mb-6">
-                <h2 class="text-2xl font-bold text-[#B06161]">Ganti Password</h2>
-                <p class="text-gray-500 text-sm mt-2">Untuk keamanan, kamu diminta membuat password baru.
-                   Gunakan password lama terlebih dahulu.</p>
-            </div>
+    <div id="reset-view" class="auth-shell hidden">
+        <div class="auth-card">
+            <div class="auth-mark" aria-hidden="true"><i class="fas fa-shield-halved"></i></div>
+            <h1 class="auth-title">Ganti Password</h1>
+            <p class="auth-note">Untuk keamanan, kamu diminta membuat password baru.
+               Masukkan password lama terlebih dahulu.</p>
+
             <form class="space-y-4" onsubmit="event.preventDefault(); submitPasswordReset();">
                 <div>
-                    <label for="reset-username" class="block text-xs font-bold text-gray-600 uppercase mb-1">Username</label>
-                    <input type="text" id="reset-username" class="input-field bg-gray-50" readonly>
+                    <label for="reset-username" class="field-label">Username</label>
+                    <input type="text" id="reset-username" class="input-field" readonly>
                 </div>
                 <div>
-                    <label for="reset-old-password" class="block text-xs font-bold text-gray-600 uppercase mb-1">Password Lama</label>
-                    <input type="password" id="reset-old-password" class="input-field bg-gray-50" autocomplete="current-password" required>
+                    <label for="reset-old-password" class="field-label">Password Lama</label>
+                    <input type="password" id="reset-old-password" class="input-field" autocomplete="current-password" required>
                 </div>
                 <div>
-                    <label for="reset-new-password" class="block text-xs font-bold text-gray-600 uppercase mb-1">Password Baru (min. 10 karakter)</label>
-                    <input type="password" id="reset-new-password" class="input-field bg-gray-50" autocomplete="new-password" minlength="10" required>
+                    <label for="reset-new-password" class="field-label">Password Baru (min. 10 karakter)</label>
+                    <input type="password" id="reset-new-password" class="input-field" autocomplete="new-password" minlength="10" required>
                 </div>
                 <div>
-                    <label for="reset-confirm-password" class="block text-xs font-bold text-gray-600 uppercase mb-1">Konfirmasi Password Baru</label>
-                    <input type="password" id="reset-confirm-password" class="input-field bg-gray-50" autocomplete="new-password" minlength="10" required>
+                    <label for="reset-confirm-password" class="field-label">Konfirmasi Password Baru</label>
+                    <input type="password" id="reset-confirm-password" class="input-field" autocomplete="new-password" minlength="10" required>
                 </div>
                 <div id="reset-status" role="alert" class="text-red-600 text-sm font-bold min-h-[1.25rem]"></div>
-                <button type="submit" id="reset-submit" class="w-full btn-primary font-bold shadow-md">Simpan Password Baru</button>
+                <button type="submit" id="reset-submit" class="w-full btn-primary btn-block">Simpan Password Baru</button>
             </form>
         </div>
     </div>
 
     <!-- ================= APP ================= -->
-    <div id="app-view" class="flex overflow-hidden hidden relative">
-        <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20 hidden md:hidden" aria-hidden="true"></div>
+    <div id="app-view" class="flex overflow-hidden hidden">
+        <!-- Overlay drawer (mobile) -->
+        <div id="mobile-overlay" class="fixed inset-0 bg-black/40 z-20 hidden" data-action="toggleSidebar" aria-hidden="true"></div>
 
-        <!-- SIDEBAR -->
-        <aside id="sidebar" class="w-64 bg-sidebar text-white flex-shrink-0 flex flex-col transition-transform duration-300 transform -translate-x-full md:translate-x-0 fixed md:relative z-30 h-full shadow-xl" aria-label="Menu utama">
-            <div class="h-16 flex items-center justify-center font-bold text-xl tracking-wider border-b border-gray-700 bg-[#2c3049]">
-                <i class="fas fa-graduation-cap mr-2 text-[#B06161]" aria-hidden="true"></i> eRAPOR DAFI
+        <!-- DRAWER MENU (mobile) -->
+        <aside id="sidebar" class="-translate-x-full" aria-label="Menu utama">
+            <div class="sidebar-head">
+                <span class="brand"><span class="mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span> eRAPOR DAFI</span>
+                <button type="button" id="drawer-close" onclick="toggleSidebar()" aria-label="Tutup menu" class="icon-btn">
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
+                </button>
             </div>
 
-            <div class="overflow-y-auto flex-1 py-6 px-3">
-                <div class="text-[10px] font-bold text-gray-400 uppercase mb-3 px-3 tracking-wider">Menu Utama</div>
-                <ul class="space-y-1" id="sidebar-menu"></ul>
+            <div class="sidebar-body">
+                <div class="menu-label">Menu Utama</div>
+                <ul id="sidebar-menu"></ul>
 
-                <div id="menu-admin" class="hidden mt-6">
-                    <div class="text-[10px] font-bold text-gray-400 uppercase mb-3 px-3 tracking-wider">Administrator</div>
-                    <ul class="space-y-1">
-                        <li class="mb-1">
-                            <button type="button" data-nav="p-monitor" class="flex items-center px-4 py-3 nav-item rounded-lg transition w-full text-left">
-                                <i class="fas fa-chart-pie w-6 mr-3 text-lg text-center" aria-hidden="true"></i>
-                                <span class="font-medium">Pantau Kelengkapan</span>
+                <div id="menu-admin" class="hidden mt-5">
+                    <div class="menu-label">Administrator</div>
+                    <ul>
+                        <li>
+                            <button type="button" data-nav="p-monitor" class="nav-item">
+                                <i class="fas fa-chart-pie" aria-hidden="true"></i>
+                                <span>Pantau Kelengkapan</span>
                             </button>
                         </li>
                     </ul>
                 </div>
             </div>
 
-            <div class="p-4 border-t border-gray-700 bg-[#2c3049]">
-                <button type="button" data-action="logout" class="flex items-center text-gray-300 hover:text-white transition w-full px-2 py-2 rounded hover:bg-white/10">
-                    <i class="fas fa-sign-out-alt mr-3" aria-hidden="true"></i> Logout
+            <div class="sidebar-foot">
+                <button type="button" data-action="logout" class="logout-btn">
+                    <i class="fas fa-sign-out-alt" aria-hidden="true"></i> Logout
                 </button>
             </div>
         </aside>
 
         <!-- MAIN -->
-        <div class="flex-1 flex flex-col overflow-hidden w-full bg-[#F2EEE5]">
-            <header class="h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 z-10 border-b border-gray-200">
-                <div class="flex items-center">
-                    <button type="button" id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Buka/tutup menu" aria-expanded="false" aria-controls="sidebar"
-                            class="text-[#B06161] text-2xl hover:bg-gray-100 p-2 rounded-md md:hidden mr-3 transition">
-                        <i class="fas fa-bars" aria-hidden="true"></i>
-                    </button>
-                    <h2 class="text-xl font-bold text-gray-800" id="page-title" aria-live="polite">Dashboard</h2>
-                </div>
+        <div class="flex-1 flex flex-col overflow-hidden w-full app-body">
+            <!-- Top bar: brand + tab menu (desktop) + profil -->
+            <header id="topbar">
+                <button type="button" id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Buka/tutup menu" aria-expanded="false" aria-controls="sidebar" class="icon-btn md:hidden">
+                    <i class="fas fa-bars" aria-hidden="true"></i>
+                </button>
+
+                <span class="brand md:hidden"><span class="mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span> eRAPOR</span>
+                <span class="brand hidden md:flex md:mr-4"><span class="mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span> eRAPOR DAFI</span>
+
+                <nav class="top-nav" id="topnav-menu" aria-label="Menu utama"></nav>
+
+                <button type="button" data-action="logout" class="icon-btn hidden md:grid" aria-label="Logout" title="Logout">
+                    <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+                </button>
+
                 <!-- Profil: <button>, bukan <div onclick> -->
                 <button type="button" id="profile-button" data-nav="p-pass"
-                        class="flex items-center space-x-3 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-100 transition">
-                    <div class="text-right hidden sm:block">
-                        <div class="text-sm font-bold text-gray-800" id="display-username">User</div>
-                        <div class="text-[10px] text-white bg-[#B06161] px-2 py-0.5 rounded-full font-bold inline-block" id="display-role">Role</div>
-                    </div>
-                    <img src="https://ui-avatars.com/api/?name=User&background=B06161&color=fff" id="user-avatar" alt="" class="h-9 w-9 rounded-full border-2 border-white shadow-sm">
+                        class="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full border border-[--border] bg-[--surface-2] hover:bg-white transition ml-auto md:ml-0">
+                    <img src="https://ui-avatars.com/api/?name=User" id="user-avatar" alt="" class="h-8 w-8 rounded-full border-2 border-white shadow-sm">
+                    <span class="text-left hidden sm:block">
+                        <span class="block text-sm font-bold text-gray-800" id="display-username">User</span>
+                        <span class="block text-[10px] font-bold text-[#B06161]" id="display-role">Role</span>
+                    </span>
                 </button>
             </header>
 
-            <main class="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-8" id="main-content">
+            <!-- Judul halaman -->
+            <div class="page-header">
+                <div>
+                    <h2 id="page-title" aria-live="polite">Dashboard</h2>
+                    <span class="sub">Sistem Penilaian Terpadu SMP-MA DAFI</span>
+                </div>
+            </div>
+
+            <main class="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-8 md:px-8" id="main-content">
 
                 <!-- DASHBOARD -->
                 <div id="p-dashboard" class="page-section hidden">
-                    <div class="bg-gradient-to-r from-[#B06161] to-[#8a4b4b] rounded-xl shadow-lg p-8 mb-8 text-white relative overflow-hidden">
-                        <div class="relative z-10">
-                            <h2 class="text-3xl font-bold mb-2">Selamat Datang, <span id="dash-greeting-name">Guru</span>!</h2>
-                            <p class="opacity-90 text-lg">Sistem Rapor Digital Terintegrasi SMP-MA DAFI.</p>
-                        </div>
-                        <i class="fas fa-chart-pie absolute -right-6 -bottom-6 text-9xl opacity-10 transform rotate-12" aria-hidden="true"></i>
+                    <div class="hero">
+                        <p class="hero-kicker">Selamat datang kembali</p>
+                        <h3 class="hero-title">Halo, <span id="dash-greeting-name">Guru</span>.</h3>
+                        <p class="hero-sub">Sistem rapor digital terintegrasi SMP-MA DAFI.</p>
+                        <i class="fas fa-chart-pie hero-art" aria-hidden="true"></i>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500"><p class="text-gray-500 text-sm font-bold uppercase">Total Siswa</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-siswa">0</h3></div>
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500"><p class="text-gray-500 text-sm font-bold uppercase">Total Kelas</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-kelas">0</h3></div>
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-yellow-500"><p class="text-gray-500 text-sm font-bold uppercase">Mata Pelajaran</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-mapel">0</h3></div>
-                        <div class="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500"><p class="text-gray-500 text-sm font-bold uppercase">Data Nilai Input</p><h3 class="text-3xl font-bold text-gray-800 mt-1" id="dash-nilai">0</h3></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+                        <div class="stat-card" style="--accent:#60A5FA"><p class="label">Total Siswa</p><p class="value" id="dash-siswa">0</p></div>
+                        <div class="stat-card" style="--accent:#4ADE80"><p class="label">Total Kelas</p><p class="value" id="dash-kelas">0</p></div>
+                        <div class="stat-card" style="--accent:#FDE047"><p class="label">Mata Pelajaran</p><p class="value" id="dash-mapel">0</p></div>
+                        <div class="stat-card" style="--accent:#B06161"><p class="label">Data Nilai Input</p><p class="value" id="dash-nilai">0</p></div>
                     </div>
                 </div>
 
                 <!-- CAPAIAN -->
                 <div id="p-capaian" class="page-section hidden">
                     <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Capaian Kompetensi</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div><label for="c-kelas" class="text-sm font-bold text-gray-600 uppercase mb-1 block">Kelas</label><select id="c-kelas" class="input-field bg-gray-50"></select></div>
-                            <div><label for="c-mapel" class="text-sm font-bold text-gray-600 uppercase mb-1 block">Mata Pelajaran</label><select id="c-mapel" class="input-field bg-gray-50"></select></div>
+                        <div class="section-head">
+                            <h4>Input Capaian Kompetensi</h4>
+                            <span class="hint">Tersimpan per kelas &amp; mata pelajaran</span>
                         </div>
-                        <div class="mb-6">
-                            <div class="flex justify-between items-center mb-2">
-                                <label for="c-text" class="text-sm font-bold text-gray-700">Deskripsi Capaian</label>
-                                <span id="c-count" class="text-xs font-medium px-2 py-1 rounded bg-gray-100 text-gray-500" aria-live="polite">0/25 kata</span>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-5">
+                            <div><label for="c-kelas" class="field-label">Kelas</label><select id="c-kelas" class="input-field"></select></div>
+                            <div><label for="c-mapel" class="field-label">Mata Pelajaran</label><select id="c-mapel" class="input-field"></select></div>
+                        </div>
+                        <div class="mb-5">
+                            <div class="flex justify-between items-center mb-2 gap-3">
+                                <label for="c-text" class="block text-sm font-bold text-gray-700">Deskripsi Capaian</label>
+                                <span id="c-count" class="badge badge-neutral" aria-live="polite">0/25 kata</span>
                             </div>
-                            <textarea id="c-text" class="w-full rounded-md border border-gray-300 p-3 bg-gray-50 focus:bg-white focus:border-[#B06161] focus:ring-2 focus:ring-[#B06161]/20" rows="4"></textarea>
+                            <textarea id="c-text" class="input-field" rows="4" placeholder="Tulis capaian pembelajaran, maksimal 25 kata."></textarea>
                         </div>
-                        <div class="flex justify-end"><button type="button" data-action="saveCapaian" class="btn-primary shadow-md"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Data</button></div>
+                        <div class="flex justify-end"><button type="button" data-action="saveCapaian" class="btn-primary"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Data</button></div>
                         <div id="c-status" role="status" aria-live="polite" class="mt-2 text-right text-sm font-bold min-h-[1.25rem]"></div>
                     </div>
                 </div>
@@ -185,39 +205,44 @@
                 <!-- NILAI -->
                 <div id="p-nilai" class="page-section hidden">
                     <div class="card-shadow">
-                        <div class="flex items-baseline justify-between border-b pb-4 mb-6 flex-wrap gap-2">
-                            <h4 class="text-xl font-bold text-gray-800">Input Nilai Akademik</h4>
-                            <span id="n-dirty" class="text-xs font-bold text-gray-500" aria-live="polite">Semua perubahan tersimpan</span>
+                        <div class="section-head">
+                            <h4>Input Nilai Akademik</h4>
+                            <span id="n-dirty" class="hint" aria-live="polite">Semua perubahan tersimpan</span>
                         </div>
-                        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div><label for="n-kelas" class="text-xs font-bold text-gray-500 uppercase mb-1 block">Kelas</label><select id="n-kelas" class="input-field"></select></div>
-                                <div><label for="n-mapel" class="text-xs font-bold text-gray-500 uppercase mb-1 block">Mapel</label><select id="n-mapel" class="input-field"></select></div>
-                                <div><label for="n-sem" class="text-xs font-bold text-gray-500 uppercase mb-1 block">Semester</label><select id="n-sem" class="input-field"></select></div>
-                                <div><label for="n-thn" class="text-xs font-bold text-gray-500 uppercase mb-1 block">Tahun</label><select id="n-thn" class="input-field"></select></div>
+
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                <div><label for="n-kelas" class="field-label">Kelas</label><select id="n-kelas" class="input-field"></select></div>
+                                <div><label for="n-mapel" class="field-label">Mapel</label><select id="n-mapel" class="input-field"></select></div>
+                                <div><label for="n-sem" class="field-label">Semester</label><select id="n-sem" class="input-field"></select></div>
+                                <div><label for="n-thn" class="field-label">Tahun</label><select id="n-thn" class="input-field"></select></div>
                             </div>
                         </div>
 
-                        <div class="flex space-x-2 mb-6 border-b border-gray-200 pb-1" role="tablist" aria-label="Metode input nilai">
-                            <button type="button" role="tab" aria-selected="true" id="btn-m" onclick="switchNilaiView('m')" class="px-6 py-2 text-sm font-bold rounded-t-lg bg-[#B06161] text-white shadow-sm">Input Manual</button>
-                            <button type="button" role="tab" aria-selected="false" id="btn-u" onclick="switchNilaiView('u')" class="px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-t-lg">Upload Excel</button>
+                        <div class="tabs" role="tablist" aria-label="Metode input nilai">
+                            <button type="button" role="tab" aria-selected="true" id="btn-m" onclick="switchNilaiView('m')" class="tab">Input Manual</button>
+                            <button type="button" role="tab" aria-selected="false" id="btn-u" onclick="switchNilaiView('u')" class="tab">Upload Excel</button>
                         </div>
 
                         <div id="view-manual">
-                            <div id="n-table-area" class="overflow-x-auto border border-gray-200 rounded-lg mb-6 bg-white shadow-inner max-h-[500px]"><div class="p-10 text-center text-gray-400">Pilih filter di atas untuk memuat data.</div></div>
-                            <p class="text-xs text-gray-500 mb-3">Tips: tekan <kbd class="bg-gray-100 px-1 rounded">Enter</kbd> pindah ke bawah, <kbd class="bg-gray-100 px-1 rounded">Shift+Enter</kbd> ke atas. Nilai wajib 0–100.</p>
-                            <div class="flex justify-end items-center"><span id="n-status-m" role="status" aria-live="polite" class="mr-3 text-sm font-bold"></span><button type="button" data-action="saveNilaiManual" class="btn-primary shadow-md"><i class="fas fa-cloud-upload-alt mr-2" aria-hidden="true"></i> Simpan Nilai Server</button></div>
+                            <div id="n-table-area" class="table-wrap"><div class="empty-state">Pilih filter di atas untuk memuat data.</div></div>
+                            <p class="text-xs text-gray-500 mb-4">Tips: tekan <kbd class="bg-gray-100 px-1 rounded">Enter</kbd> pindah ke bawah, <kbd class="bg-gray-100 px-1 rounded">Shift+Enter</kbd> ke atas. Nilai wajib 0–100.</p>
+                            <div class="flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+                                <span id="n-status-m" role="status" aria-live="polite" class="text-sm font-bold sm:text-right"></span>
+                                <button type="button" data-action="saveNilaiManual" class="btn-primary"><i class="fas fa-cloud-upload-alt mr-2" aria-hidden="true"></i> Simpan Nilai Server</button>
+                            </div>
                         </div>
+
                         <div id="view-upload" class="hidden">
-                            <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-5 rounded-md mb-6 text-sm">
+                            <div class="callout">
                                 <strong>Format Kolom Excel Wajib (Mulai A1):</strong><br>
                                 <code>1.NIS</code> | <code>2.Nama</code> | <code>3.UH1</code> | <code>4.UH2</code> | <code>5.UH3</code> | <code>6.UH4</code> | <code>7.UH5</code> | <code>8.STS</code> | <code>9.SAS</code>
                             </div>
-                            <div class="flex flex-col md:flex-row items-center gap-4">
-                                <input type="file" id="n-file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#B06161] file:text-white border border-gray-300 rounded-lg p-2 bg-white" accept=".xlsx, .xls" aria-label="Pilih file Excel nilai">
-                                <button type="button" data-action="uploadNilai" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-lg shadow whitespace-nowrap transition disabled:opacity-60"><i class="fas fa-upload mr-2" aria-hidden="true"></i> Preview & Simpan</button>
+                            <div class="flex flex-col md:flex-row items-stretch md:items-center gap-4">
+                                <input type="file" id="n-file" class="file-input" accept=".xlsx, .xls" aria-label="Pilih file Excel nilai">
+                                <button type="button" data-action="uploadNilai" class="btn-primary whitespace-nowrap"><i class="fas fa-upload mr-2" aria-hidden="true"></i> Preview &amp; Simpan</button>
                             </div>
-                            <div id="upload-problems" class="hidden mt-3 bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded text-sm" role="alert"></div>
+                            <div id="upload-problems" class="callout bad hidden mt-4" role="alert"></div>
                             <div id="n-status-u" role="status" aria-live="polite" class="mt-3 text-sm font-bold text-right min-h-[1.25rem]"></div>
                         </div>
                     </div>
@@ -226,58 +251,82 @@
                 <!-- ABSENSI -->
                 <div id="p-absen" class="page-section hidden">
                     <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Absensi</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div><label for="a-kelas" class="text-xs font-bold text-gray-500 uppercase">Kelas</label><select id="a-kelas" class="input-field bg-gray-50 mt-1"></select></div>
-                            <div><label for="a-sem" class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="a-sem" class="input-field bg-gray-50 mt-1"></select></div>
-                            <div><label for="a-thn" class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="a-thn" class="input-field bg-gray-50 mt-1"></select></div>
+                        <div class="section-head">
+                            <h4>Input Absensi</h4>
+                            <span class="hint">Sakit · Izin · Alpha</span>
                         </div>
-                        <div id="a-table" class="mb-6 overflow-x-auto border rounded-lg" aria-label="Tabel absensi"></div>
-                        <div class="flex justify-end"><span id="a-status" role="status" aria-live="polite" class="mr-3 text-sm font-bold self-center"></span><button type="button" data-action="saveAbsen" class="btn-primary shadow"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Absensi</button></div>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="a-kelas" class="field-label">Kelas</label><select id="a-kelas" class="input-field"></select></div>
+                                <div><label for="a-sem" class="field-label">Semester</label><select id="a-sem" class="input-field"></select></div>
+                                <div><label for="a-thn" class="field-label">Tahun</label><select id="a-thn" class="input-field"></select></div>
+                            </div>
+                        </div>
+                        <div id="a-table" class="table-wrap" aria-label="Tabel absensi"></div>
+                        <div class="flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+                            <span id="a-status" role="status" aria-live="polite" class="text-sm font-bold sm:text-right"></span>
+                            <button type="button" data-action="saveAbsen" class="btn-primary"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Absensi</button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- EKSTRA -->
                 <div id="p-ekstra" class="page-section hidden">
                     <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Input Ekstrakurikuler</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                            <div><label for="e-kelas" class="text-xs font-bold text-gray-500 uppercase">Kelas</label><select id="e-kelas" class="input-field bg-gray-50 mt-1"></select></div>
-                            <div><label for="e-sem" class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="e-sem" class="input-field bg-gray-50 mt-1"></select></div>
-                            <div><label for="e-thn" class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="e-thn" class="input-field bg-gray-50 mt-1"></select></div>
+                        <div class="section-head">
+                            <h4>Input Ekstrakurikuler</h4>
+                            <span class="hint">Maksimal 2 kegiatan per siswa</span>
                         </div>
-                        <div id="e-table" class="mb-6 overflow-x-auto border rounded-lg" aria-label="Tabel ekstrakurikuler"></div>
-                        <div class="flex justify-end"><span id="e-status" role="status" aria-live="polite" class="mr-3 text-sm font-bold self-center"></span><button type="button" data-action="saveEkstra" class="btn-primary shadow"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Ekstra</button></div>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="e-kelas" class="field-label">Kelas</label><select id="e-kelas" class="input-field"></select></div>
+                                <div><label for="e-sem" class="field-label">Semester</label><select id="e-sem" class="input-field"></select></div>
+                                <div><label for="e-thn" class="field-label">Tahun</label><select id="e-thn" class="input-field"></select></div>
+                            </div>
+                        </div>
+                        <div id="e-table" class="table-wrap" aria-label="Tabel ekstrakurikuler"></div>
+                        <div class="flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3">
+                            <span id="e-status" role="status" aria-live="polite" class="text-sm font-bold sm:text-right"></span>
+                            <button type="button" data-action="saveEkstra" class="btn-primary"><i class="fas fa-save mr-2" aria-hidden="true"></i> Simpan Ekstra</button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- STATUS -->
                 <div id="p-status" class="page-section hidden">
                     <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Papan Pemantau Status Input</h4>
-                        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div><label for="s-sem" class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="s-sem" class="input-field mt-1"></select></div>
-                                <div><label for="s-thn" class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="s-thn" class="input-field mt-1"></select></div>
-                            </div>
-                            <button type="button" data-action="loadStatus" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow"><i class="fas fa-search mr-2" aria-hidden="true"></i> Tampilkan Laporan</button>
+                        <div class="section-head">
+                            <h4>Papan Pemantau Status Input</h4>
+                            <span class="hint">Kelengkapan nilai per kelas</span>
                         </div>
-                        <div id="s-area" class="grid grid-cols-1 md:grid-cols-2 gap-4" role="status" aria-live="polite"></div>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                                <div><label for="s-sem" class="field-label">Semester</label><select id="s-sem" class="input-field"></select></div>
+                                <div><label for="s-thn" class="field-label">Tahun</label><select id="s-thn" class="input-field"></select></div>
+                            </div>
+                            <button type="button" data-action="loadStatus" class="btn-primary w-full sm:w-auto"><i class="fas fa-search mr-2" aria-hidden="true"></i> Tampilkan Laporan</button>
+                        </div>
+                        <div id="s-area" class="grid grid-cols-1 lg:grid-cols-2 gap-x-5" role="status" aria-live="polite"></div>
                     </div>
                 </div>
 
                 <!-- CETAK RAPOR -->
                 <div id="p-cetak" class="page-section hidden">
                     <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Cetak Rapor &amp; PDF</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-5 rounded-xl border border-gray-200">
-                            <div><label for="r-kelas" class="text-xs font-bold text-gray-500 uppercase mb-1">Kelas</label><select id="r-kelas" class="input-field bg-white"></select></div>
-                            <div><label for="r-siswa" class="text-xs font-bold text-gray-500 uppercase mb-1">Siswa</label><select id="r-siswa" class="input-field bg-white"></select></div>
-                            <div><label for="r-jenis" class="text-xs font-bold text-gray-500 uppercase mb-1">Jenis Rapor</label><select id="r-jenis" class="input-field bg-white"><option>Tengah Semester</option><option>Akhir Semester</option></select></div>
-                            <div><label for="r-sem" class="text-xs font-bold text-gray-500 uppercase mb-1">Semester</label><select id="r-sem" class="input-field bg-white"></select></div>
-                            <div class="md:col-span-4"><label for="r-thn" class="text-xs font-bold text-gray-500 uppercase mb-1">Tahun Ajaran</label><select id="r-thn" class="input-field bg-white"></select></div>
+                        <div class="section-head">
+                            <h4>Cetak Rapor &amp; PDF</h4>
+                            <span class="hint">Dihasilkan ke Google Drive</span>
                         </div>
-                        <button type="button" data-action="previewRapor" class="w-full bg-orange-500 text-white font-bold py-3 rounded-lg hover:bg-orange-600 shadow-md transition"><i class="fas fa-desktop mr-2" aria-hidden="true"></i> Ambil Preview Rapor</button>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                <div><label for="r-kelas" class="field-label">Kelas</label><select id="r-kelas" class="input-field"></select></div>
+                                <div><label for="r-siswa" class="field-label">Siswa</label><select id="r-siswa" class="input-field"></select></div>
+                                <div><label for="r-jenis" class="field-label">Jenis Rapor</label><select id="r-jenis" class="input-field"><option>Tengah Semester</option><option>Akhir Semester</option></select></div>
+                                <div><label for="r-sem" class="field-label">Semester</label><select id="r-sem" class="input-field"></select></div>
+                                <div class="sm:col-span-2 xl:col-span-4"><label for="r-thn" class="field-label">Tahun Ajaran</label><select id="r-thn" class="input-field"></select></div>
+                            </div>
+                        </div>
+                        <button type="button" data-action="previewRapor" class="btn-primary btn-block"><i class="fas fa-desktop mr-2" aria-hidden="true"></i> Ambil Preview Rapor</button>
 
                         <div id="r-preview" class="hidden mt-8 border-t border-gray-200 pt-6"></div>
                     </div>
@@ -286,19 +335,22 @@
                 <!-- MONITORING -->
                 <div id="p-monitor" class="page-section hidden">
                     <div class="card-shadow">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Pantau Kelengkapan Nilai (Leger)</h4>
-                        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div><label for="m-kelas" class="text-xs font-bold text-gray-500 uppercase">Kelas</label><select id="m-kelas" class="input-field bg-white mt-1"></select></div>
-                                <div><label for="m-sem" class="text-xs font-bold text-gray-500 uppercase">Semester</label><select id="m-sem" class="input-field bg-white mt-1"></select></div>
-                                <div><label for="m-thn" class="text-xs font-bold text-gray-500 uppercase">Tahun</label><select id="m-thn" class="input-field bg-white mt-1"></select></div>
-                            </div>
-                            <button type="button" data-action="loadMonitoring" class="mt-4 w-full md:w-auto bg-[#B06161] hover:bg-[#8a4b4b] text-white font-bold py-2.5 px-6 rounded-lg transition shadow"><i class="fas fa-search mr-2" aria-hidden="true"></i> Tampilkan Leger</button>
+                        <div class="section-head">
+                            <h4>Pantau Kelengkapan Nilai (Leger)</h4>
+                            <span class="hint">Admin</span>
                         </div>
-                        <div class="overflow-x-auto border rounded-lg shadow-sm">
-                            <table class="w-full text-sm text-left border-collapse">
-                                <thead id="m-table-head" class="bg-gray-200 text-gray-800 font-bold text-xs uppercase tracking-wider"></thead>
-                                <tbody id="m-table-body" class="divide-y divide-gray-200 bg-white"></tbody>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="m-kelas" class="field-label">Kelas</label><select id="m-kelas" class="input-field"></select></div>
+                                <div><label for="m-sem" class="field-label">Semester</label><select id="m-sem" class="input-field"></select></div>
+                                <div><label for="m-thn" class="field-label">Tahun</label><select id="m-thn" class="input-field"></select></div>
+                            </div>
+                            <button type="button" data-action="loadMonitoring" class="mt-4 btn-primary w-full sm:w-auto"><i class="fas fa-search mr-2" aria-hidden="true"></i> Tampilkan Leger</button>
+                        </div>
+                        <div class="table-wrap" style="max-height:70vh">
+                            <table class="data-table">
+                                <thead id="m-table-head"></thead>
+                                <tbody id="m-table-body"></tbody>
                             </table>
                         </div>
                     </div>
@@ -307,13 +359,15 @@
                 <!-- PASSWORD -->
                 <div id="p-pass" class="page-section hidden">
                     <div class="card-shadow max-w-md mx-auto">
-                        <h4 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4 text-center">Pengaturan Akun</h4>
+                        <div class="section-head" style="justify-content:center">
+                            <h4>Pengaturan Akun</h4>
+                        </div>
                         <div id="p7-msg" role="status" aria-live="polite" class="mb-4"></div>
                         <form class="space-y-4" onsubmit="event.preventDefault(); changePw();">
-                            <div><label for="pw-old" class="text-xs font-bold text-gray-500 uppercase">Password Lama</label><input type="password" id="pw-old" class="input-field bg-gray-50 mt-1" autocomplete="current-password"></div>
-                            <div><label for="pw-new" class="text-xs font-bold text-gray-500 uppercase">Password Baru (min. 10 karakter)</label><input type="password" id="pw-new" class="input-field bg-gray-50 mt-1" autocomplete="new-password" minlength="10"></div>
-                            <div><label for="pw-conf" class="text-xs font-bold text-gray-500 uppercase">Konfirmasi</label><input type="password" id="pw-conf" class="input-field bg-gray-50 mt-1" autocomplete="new-password" minlength="10"></div>
-                            <button type="submit" data-action="changePw" class="w-full btn-primary mt-4 shadow-md"><i class="fas fa-key mr-2" aria-hidden="true"></i> Simpan Password Baru</button>
+                            <div><label for="pw-old" class="field-label">Password Lama</label><input type="password" id="pw-old" class="input-field" autocomplete="current-password"></div>
+                            <div><label for="pw-new" class="field-label">Password Baru (min. 10 karakter)</label><input type="password" id="pw-new" class="input-field" autocomplete="new-password" minlength="10"></div>
+                            <div><label for="pw-conf" class="field-label">Konfirmasi</label><input type="password" id="pw-conf" class="input-field" autocomplete="new-password" minlength="10"></div>
+                            <button type="submit" data-action="changePw" class="w-full btn-primary mt-3"><i class="fas fa-key mr-2" aria-hidden="true"></i> Simpan Password Baru</button>
                         </form>
                     </div>
                 </div>
