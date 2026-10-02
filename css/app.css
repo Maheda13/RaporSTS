@@ -296,6 +296,45 @@ textarea.input-field { height: auto; min-height: 7rem; padding: .75rem .9rem; re
   box-shadow: var(--shadow-card);
 }
 
+/* ============ Tahap 10: periode aktif, konfirmasi inline, nav fade ============ */
+/* Badge periode aktif di topbar — satu sumber kebenaran visual, tidak perlu lagi
+   menebak semester dari isi tiap dropdown. */
+.period-badge {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .72rem; font-weight: 700; white-space: nowrap;
+  color: var(--primary-color); background: var(--primary-soft);
+  border: 1px solid rgba(176,97,97,.35); border-radius: 999px;
+  padding: .3rem .7rem; flex: none;
+}
+.period-badge::before { content: '🗓'; font-size: .8rem; }
+/* Chip di filter bar input — menggantikan dua dropdown terkunci yang tampak
+   "bisa dipilih tapi tidak bisa". Select asli tetap ada (hidden secara visual)
+   supaya getGradeFilters() tetap terbaca & jangkar test tidak rusak. */
+.chip-period {
+  display: inline-flex; align-items: center; gap: .45rem;
+  font-size: .78rem; font-weight: 700; color: var(--ink-2);
+  background: var(--surface); border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm); padding: .55rem .8rem;
+}
+.chip-period strong { color: var(--primary-color); }
+.period-field { display: none; }   /* select terkunci: tak terlihat, masih terbaca */
+/* Bar konfirmasi inline (pengganti dialog native). */
+.confirm-bar {
+  position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%);
+  z-index: 60; width: min(34rem, calc(100vw - 2rem));
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow-pop);
+  padding: 1rem 1.1rem;
+}
+.confirm-msg { margin: 0 0 .85rem; font-size: .87rem; line-height: 1.55; color: var(--ink); white-space: pre-line; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+/* Scroll-fade top-nav: hanya saat menu benar-benar lebih lebar dari layar
+   (class .nav-fade dipasang dari JS setelah buildMenu). */
+.top-nav.nav-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 1rem, #000 calc(100% - 1.6rem), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 1rem, #000 calc(100% - 1.6rem), transparent 100%);
+}
+
 /* Lencana status */
 .badge {
   display: inline-block; font-size: .62rem; font-weight: 700;
@@ -490,6 +529,37 @@ textarea.input-field { height: auto; min-height: 7rem; padding: .75rem .9rem; re
 .auth-title { margin: 0; text-align: center; font-size: 1.5rem; font-weight: 700; color: var(--ink); }
 .auth-sub { margin: .3rem 0 1.5rem; text-align: center; font-size: .85rem; color: var(--ink-3); }
 .auth-note { margin: .3rem 0 1.4rem; text-align: center; font-size: .88rem; color: var(--ink-2); line-height: 1.6; }
+
+/* --------------------------------------- Progres boot (Tahap 9, layar bertahap) */
+.boot-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.boot-step {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .7rem .85rem; border: 1px solid var(--border); border-radius: .75rem;
+  background: var(--bg-color);
+  font-size: .88rem; font-weight: 600; color: var(--ink-3);
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.boot-dot {
+  flex: 0 0 auto; width: 1.15rem; height: 1.15rem; border-radius: 50%;
+  border: 2px solid var(--border); background: var(--surface);
+  display: grid; place-items: center; font-size: .65rem;
+}
+/* Berjalan: titik berputar, baris disorot. */
+.boot-step.is-active { color: var(--ink); border-color: var(--primary-color); background: var(--primary-soft); }
+.boot-step.is-active .boot-dot {
+  border-color: var(--primary-color); border-top-color: transparent;
+  background: transparent; animation: boot-spin .7s linear infinite;
+}
+/* Selesai: titik tercentang hijau. */
+.boot-step.is-done { color: var(--ink-2); border-color: #B7DFC9; background: #F0FAF4; }
+.boot-step.is-done .boot-dot { border-color: #16A34A; background: #16A34A; color: #fff; }
+.boot-step.is-done .boot-dot::before { content: "\2713"; font-weight: 700; }
+/* Gagal: baris merah; tombol Coba lagi muncul di layar. */
+.boot-step.is-error { color: var(--coral-ink); border-color: var(--coral); background: var(--coral-soft); }
+.boot-step.is-error .boot-dot { border-color: var(--coral); }
+.boot-step.is-error .boot-dot::before { content: "\2715"; color: var(--coral-ink); font-weight: 700; font-size: .6rem; }
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .boot-step.is-active .boot-dot { animation-duration: 2.5s; } }
 
 /* --------------------------------------------------------- Contrast tweaks */
 .text-gray-500 { color: var(--ink-2); }  /* label kecil 10–12px lebih terbaca */
