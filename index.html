@@ -56,6 +56,26 @@
         </div>
     </div>
 
+    <!-- ============ PROGRES BOOT (Tahap 9) ============
+         Satu layar bertahap menemani pemanggilan data awal setelah login /
+         restore sesi, supaya tidak ada lagi spinner kecil yang berkedip-kedip. -->
+    <div id="boot-view" class="auth-shell hidden">
+        <div class="auth-card">
+            <div class="auth-mark" aria-hidden="true"><i class="fas fa-circle-notch fa-spin"></i></div>
+            <h1 class="auth-title">Menyiapkan aplikasi</h1>
+            <p class="auth-sub">Memuat data Anda — ini hanya sekali per sesi.</p>
+
+            <ol id="boot-steps" class="boot-steps" role="status" aria-live="polite">
+                <li class="boot-step" data-boot-step="session"><span class="boot-dot" aria-hidden="true"></span><span class="boot-label">Memvalidasi sesi</span></li>
+                <li class="boot-step" data-boot-step="initial"><span class="boot-dot" aria-hidden="true"></span><span class="boot-label">Memuat data awal</span></li>
+                <li class="boot-step" data-boot-step="dashboard"><span class="boot-dot" aria-hidden="true"></span><span class="boot-label">Menyiapkan dashboard</span></li>
+            </ol>
+
+            <div id="boot-error" role="alert" class="inline-msg err hidden mt-5"></div>
+            <button type="button" id="boot-retry" class="w-full btn-primary hidden mt-5">Coba lagi</button>
+        </div>
+    </div>
+
     <!-- ============ RESET PASSWORD (paksa-reset Tahap 2) ============ -->
     <div id="reset-view" class="auth-shell hidden">
         <div class="auth-card">
@@ -104,18 +124,6 @@
             <div class="sidebar-body">
                 <div class="menu-label">Menu Utama</div>
                 <ul id="sidebar-menu"></ul>
-
-                <div id="menu-admin" class="hidden mt-5">
-                    <div class="menu-label">Administrator</div>
-                    <ul>
-                        <li>
-                            <button type="button" data-nav="p-monitor" class="nav-item">
-                                <i class="fas fa-chart-pie" aria-hidden="true"></i>
-                                <span>Pantau Kelengkapan</span>
-                            </button>
-                        </li>
-                    </ul>
-                </div>
             </div>
 
             <div class="sidebar-foot">
@@ -135,6 +143,9 @@
 
                 <span class="brand md:hidden"><span class="mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span> eRAPOR</span>
                 <span class="brand hidden md:flex md:mr-4"><span class="mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span> eRAPOR DAFI</span>
+
+                <!-- Periode aktif global (Tahap 10) — terlihat di semua halaman -->
+                <span id="period-badge" class="period-badge hidden" title="Periode aktif — semua input dikunci ke periode ini"></span>
 
                 <nav class="top-nav" id="topnav-menu" aria-label="Menu utama"></nav>
 
@@ -157,7 +168,7 @@
             <div class="page-header">
                 <div>
                     <h2 id="page-title" aria-live="polite">Dashboard</h2>
-                    <span class="sub">Sistem Penilaian Terpadu SMP-MA DAFI</span>
+                    <span class="sub" id="page-sub">Ringkasan kerja dan status hari ini</span>
                 </div>
             </div>
 
@@ -171,11 +182,21 @@
                         <p class="hero-sub">Sistem rapor digital terintegrasi SMP-MA DAFI.</p>
                         <i class="fas fa-chart-pie hero-art" aria-hidden="true"></i>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
+                    <div id="dash-stats" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
                         <div class="stat-card" style="--accent:#60A5FA"><p class="label">Total Siswa</p><p class="value" id="dash-siswa">0</p></div>
                         <div class="stat-card" style="--accent:#4ADE80"><p class="label">Total Kelas</p><p class="value" id="dash-kelas">0</p></div>
                         <div class="stat-card" style="--accent:#FDE047"><p class="label">Mata Pelajaran</p><p class="value" id="dash-mapel">0</p></div>
                         <div class="stat-card" style="--accent:#B06161"><p class="label">Data Nilai Input</p><p class="value" id="dash-nilai">0</p></div>
+                    </div>
+                    <!-- Daftar tugas guru & wali kelas (Tahap 10) — menggantikan statistik global -->
+                    <div id="dash-workbench" class="hidden mt-5">
+                        <div class="card-shadow">
+                            <div class="section-head">
+                                <h4>Tugas Saya</h4>
+                                <span class="hint">Kelas × mata pelajaran yang Anda ampu · periode berjalan</span>
+                            </div>
+                            <div id="dash-workbench-list" class="grid grid-cols-1 lg:grid-cols-2 gap-x-5" role="status" aria-live="polite"></div>
+                        </div>
                     </div>
                     <div id="dash-progress" class="hidden mt-5">
                         <div class="card-shadow">
@@ -197,11 +218,14 @@
                     <div class="card-shadow">
                         <div class="section-head">
                             <h4>Input Capaian Kompetensi</h4>
-                            <span class="hint">Tersimpan per kelas &amp; mata pelajaran</span>
+                            <span class="hint">Tersimpan per kelas, mata pelajaran &amp; periode</span>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-5">
                             <div><label for="c-kelas" class="field-label">Kelas</label><select id="c-kelas" class="input-field"></select></div>
                             <div><label for="c-mapel" class="field-label">Mata Pelajaran</label><select id="c-mapel" class="input-field"></select></div>
+                            <div><span class="chip-period" data-period-chip="c"></span>
+                                <label for="c-sem" class="field-label sr-only">Semester</label><select id="c-sem" class="input-field period-field"></select></div>
+                            <div><label for="c-thn" class="field-label sr-only">Tahun Ajaran</label><select id="c-thn" class="input-field period-field"></select></div>
                         </div>
                         <div class="mb-5">
                             <div class="flex justify-between items-center mb-2 gap-3">
@@ -227,8 +251,9 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                                 <div><label for="n-kelas" class="field-label">Kelas</label><select id="n-kelas" class="input-field"></select></div>
                                 <div><label for="n-mapel" class="field-label">Mapel</label><select id="n-mapel" class="input-field"></select></div>
-                                <div><label for="n-sem" class="field-label">Semester</label><select id="n-sem" class="input-field"></select></div>
-                                <div><label for="n-thn" class="field-label">Tahun</label><select id="n-thn" class="input-field"></select></div>
+                                <div><span class="chip-period" data-period-chip="n"></span>
+                                <label for="n-sem" class="field-label sr-only">Semester</label><select id="n-sem" class="input-field period-field"></select></div>
+                                <div><label for="n-thn" class="field-label sr-only">Tahun</label><select id="n-thn" class="input-field period-field"></select></div>
                             </div>
                         </div>
 
@@ -271,8 +296,9 @@
                         <div class="filter-bar">
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div><label for="a-kelas" class="field-label">Kelas</label><select id="a-kelas" class="input-field"></select></div>
-                                <div><label for="a-sem" class="field-label">Semester</label><select id="a-sem" class="input-field"></select></div>
-                                <div><label for="a-thn" class="field-label">Tahun</label><select id="a-thn" class="input-field"></select></div>
+                                <div><span class="chip-period" data-period-chip="a"></span>
+                                <label for="a-sem" class="field-label sr-only">Semester</label><select id="a-sem" class="input-field period-field"></select></div>
+                                <div><label for="a-thn" class="field-label sr-only">Tahun</label><select id="a-thn" class="input-field period-field"></select></div>
                             </div>
                         </div>
                         <div id="a-table" class="table-wrap" aria-label="Tabel absensi"></div>
@@ -293,8 +319,9 @@
                         <div class="filter-bar">
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div><label for="e-kelas" class="field-label">Kelas</label><select id="e-kelas" class="input-field"></select></div>
-                                <div><label for="e-sem" class="field-label">Semester</label><select id="e-sem" class="input-field"></select></div>
-                                <div><label for="e-thn" class="field-label">Tahun</label><select id="e-thn" class="input-field"></select></div>
+                                <div><span class="chip-period" data-period-chip="e"></span>
+                                <label for="e-sem" class="field-label sr-only">Semester</label><select id="e-sem" class="input-field period-field"></select></div>
+                                <div><label for="e-thn" class="field-label sr-only">Tahun</label><select id="e-thn" class="input-field period-field"></select></div>
                             </div>
                         </div>
                         <div id="e-table" class="table-wrap" aria-label="Tabel ekstrakurikuler"></div>
@@ -323,25 +350,84 @@
                     </div>
                 </div>
 
-                <!-- CETAK RAPOR -->
-                <div id="p-cetak" class="page-section hidden">
+                <!-- RAPOR: periode aktif & arsip (dua panel dalam satu halaman) -->
+                <div id="p-rapor" class="page-section hidden">
                     <div class="card-shadow">
-                        <div class="section-head">
-                            <h4>Cetak Rapor &amp; PDF</h4>
-                            <span class="hint">Dihasilkan ke Google Drive</span>
+                        <div class="section-head"><h4>Rapor</h4><span class="hint">Pratinjau dan cetak rapor periode aktif maupun arsip</span></div>
+                        <div id="rapor-tablist" class="tabs mb-5" role="tablist" aria-label="Mode rapor">
+                            <button type="button" role="tab" id="rapor-tab-active" aria-controls="p-cetak" aria-selected="true" class="tab">Periode Aktif</button>
+                            <button type="button" role="tab" id="rapor-tab-archive" aria-controls="p-arsip" aria-selected="false" class="tab">Arsip</button>
+                        </div>
+                        <div id="p-cetak" class="rapor-panel">
+                            <div class="section-head">
+                                <h4>Cetak Rapor &amp; PDF</h4>
+                                <span class="hint">Dihasilkan ke Google Drive</span>
+                            </div>
+                            <div class="filter-bar">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                    <div><label for="r-kelas" class="field-label">Kelas</label><select id="r-kelas" class="input-field"></select></div>
+                                    <div><label for="r-siswa" class="field-label">Siswa</label><select id="r-siswa" class="input-field"></select></div>
+                                    <div><label for="r-jenis" class="field-label">Jenis Rapor</label><select id="r-jenis" class="input-field"><option>Tengah Semester</option><option>Akhir Semester</option></select></div>
+                                    <div><span class="chip-period" data-period-chip="r"></span>
+                                <label for="r-sem" class="field-label sr-only">Semester</label><select id="r-sem" class="input-field period-field"></select></div>
+                                    <div class="sm:col-span-2 xl:col-span-4"><label for="r-thn" class="field-label sr-only">Tahun Ajaran</label><select id="r-thn" class="input-field period-field"></select></div>
+                                </div>
+                            </div>
+                            <button type="button" data-action="previewRapor" class="btn-primary btn-block"><i class="fas fa-desktop mr-2" aria-hidden="true"></i> Ambil Preview Rapor</button>
+
+                            <div id="r-preview" class="hidden mt-8 border-t border-gray-200 pt-6"></div>
+                        </div>
+
+                        <!-- ARSIP PERIODE LAMA (baca saja — Tahap 9) -->
+                        <div id="p-arsip" class="rapor-panel">
+                            <div class="section-head">
+                                <h4>Arsip Periode Lama</h4>
+                            <span class="hint">Hanya baca · tidak ada input yang bisa diubah</span>
+                        </div>
+                        <div class="callout mb-4">
+                            Periode di bawah dipilih bebas (semua semester/tahun ajaran yang pernah berisi data).
+                            <b>Tidak ada data yang bisa diubah dari halaman ini</b> — untuk menulis, gunakan
+                            halaman input dengan periode aktif.
                         </div>
                         <div class="filter-bar">
-                            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                                <div><label for="r-kelas" class="field-label">Kelas</label><select id="r-kelas" class="input-field"></select></div>
-                                <div><label for="r-siswa" class="field-label">Siswa</label><select id="r-siswa" class="input-field"></select></div>
-                                <div><label for="r-jenis" class="field-label">Jenis Rapor</label><select id="r-jenis" class="input-field"><option>Tengah Semester</option><option>Akhir Semester</option></select></div>
-                                <div><label for="r-sem" class="field-label">Semester</label><select id="r-sem" class="input-field"></select></div>
-                                <div class="sm:col-span-2 xl:col-span-4"><label for="r-thn" class="field-label">Tahun Ajaran</label><select id="r-thn" class="input-field"></select></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="ar-kelas" class="field-label">Kelas</label><select id="ar-kelas" class="input-field"></select></div>
+                                <div><label for="ar-sem" class="field-label">Semester</label><select id="ar-sem" class="input-field"></select></div>
+                                <div><label for="ar-thn" class="field-label">Tahun Ajaran</label><select id="ar-thn" class="input-field"></select></div>
                             </div>
+                            <button type="button" data-action="loadArchive" class="mt-4 btn-primary w-full sm:w-auto">
+                                <i class="fas fa-box-archive mr-2" aria-hidden="true"></i> Muat Arsip Nilai
+                            </button>
+                            <div id="ar-status" role="status" aria-live="polite" class="mt-2 text-sm font-bold min-h-[1.25rem]"></div>
                         </div>
-                        <button type="button" data-action="previewRapor" class="btn-primary btn-block"><i class="fas fa-desktop mr-2" aria-hidden="true"></i> Ambil Preview Rapor</button>
 
-                        <div id="r-preview" class="hidden mt-8 border-t border-gray-200 pt-6"></div>
+                        <div id="ar-summary" class="preview-summary hidden"></div>
+                        <div class="table-wrap hidden" id="ar-table-wrap" style="max-height:60vh">
+                            <table class="data-table">
+                                <thead id="ar-table-head"></thead>
+                                <tbody id="ar-table-body"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Cetak rapor periode arsip (Admin/Wali Kelas — gerbang server tetap sama) -->
+                        <div id="ar-print-card">
+                        <div class="section-head mt-6">
+                            <h4>Cetak Rapor Arsip</h4>
+                            <span class="hint">PDF baru ke Drive — data rapor tidak diubah</span>
+                        </div>
+                        <div class="filter-bar">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="ar-r-siswa" class="field-label">Siswa</label><select id="ar-r-siswa" class="input-field"></select></div>
+                                <div><label for="ar-jenis" class="field-label">Jenis Rapor</label><select id="ar-jenis" class="input-field"><option>Tengah Semester</option><option>Akhir Semester</option></select></div>
+                                <div class="flex items-end">
+                                    <button type="button" data-action="archivePreview" class="btn-primary w-full"><i class="fas fa-desktop mr-2" aria-hidden="true"></i> Ambil Preview</button>
+                                </div>
+                            </div>
+                            <div id="ar-print-status" role="status" aria-live="polite" class="mt-2 text-sm font-bold min-h-[1.25rem]"></div>
+                        </div>
+                            <div id="ar-preview" class="hidden mt-6"></div>
+                        </div>
+                        </div>
                     </div>
                 </div>
 
@@ -383,10 +469,39 @@
                         </div>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <thead><tr><th>NIS</th><th>NISN</th><th>Nama Siswa</th><th>Kelas</th><th class="center">Aksi</th></tr></thead>
-                                <tbody id="w-table-body"><tr><td colspan="5" class="empty-state">Pilih filter lalu klik Tampilkan Siswa.</td></tr></tbody>
+                                <thead><tr><th>NIS</th><th>NISN</th><th>Nama Siswa</th><th>Kelas</th><th>Status</th><th class="center">Aksi</th></tr></thead>
+                                <tbody id="w-table-body"><tr><td colspan="6" class="empty-state">Pilih filter lalu klik Tampilkan Siswa.</td></tr></tbody>
                             </table>
                         </div>
+
+                        <!-- PROMOSI KELAS (Operator) -->
+                        <div class="filter-bar mt-4">
+                            <div class="section-head" style="padding-bottom:.6rem;margin-bottom:.8rem">
+                                <h4 style="font-size:.95rem">Promosi Kelas</h4>
+                                <span class="hint">Pindah massal / tandai lulus — NIS tidak berubah</span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="pr-asal" class="field-label">Kelas Asal</label><select id="pr-asal" class="input-field"></select></div>
+                                <div><label for="pr-tujuan" class="field-label">Tujuan</label><select id="pr-tujuan" class="input-field"></select></div>
+                                <div class="flex items-end">
+                                    <button type="button" data-action="previewPromotion" class="btn-secondary w-full"><i class="fas fa-list-check mr-2" aria-hidden="true"></i> Pratinjau</button>
+                                </div>
+                            </div>
+                            <div id="pr-preview" class="hidden mt-4">
+                                <p id="pr-summary" class="text-sm font-semibold text-gray-700 mb-2" aria-live="polite"></p>
+                                <div class="table-wrap" style="max-height:16rem">
+                                    <table class="data-table">
+                                        <thead><tr><th class="center">Ikut</th><th>NIS</th><th>Nama Siswa</th><th>Kelas Asal</th><th>Status</th></tr></thead>
+                                        <tbody id="pr-table-body"></tbody>
+                                    </table>
+                                </div>
+                                <div class="flex justify-end mt-3">
+                                    <button type="button" data-action="commitPromotion" class="btn-primary"><i class="fas fa-angles-right mr-2" aria-hidden="true"></i> Jalankan Promosi</button>
+                                </div>
+                            </div>
+                            <div id="pr-status" role="status" aria-live="polite" class="mt-2 text-right text-sm font-bold min-h-[1.25rem]"></div>
+                        </div>
+
                         <div class="filter-bar mt-4">
                             <div class="section-head" style="padding-bottom:.6rem;margin-bottom:.8rem"><h4 style="font-size:.95rem">Tambah / Ubah Siswa</h4></div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -442,6 +557,18 @@
                             <div class="flex justify-end mt-4">
                                 <button type="button" data-action="saveUserAccount" class="btn-primary"><i class="fas fa-user-check mr-2" aria-hidden="true"></i> Simpan Perubahan Akun</button>
                             </div>
+                        </div>
+                        <div class="filter-bar mt-4">
+                            <div class="section-head" style="padding-bottom:.6rem;margin-bottom:.8rem"><h4 style="font-size:.95rem">Periode Aktif</h4><span class="hint">Berlaku untuk seluruh guru &amp; wali kelas</span></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div><label for="ap-sem" class="field-label">Semester</label><select id="ap-sem" class="input-field"></select></div>
+                                <div><label for="ap-thn" class="field-label">Tahun Ajaran</label><select id="ap-thn" class="input-field"></select></div>
+                                <div class="flex items-end">
+                                    <button type="button" data-action="setActivePeriod" class="btn-primary w-full"><i class="fas fa-calendar-check mr-2" aria-hidden="true"></i> Jadikan Periode Aktif</button>
+                                </div>
+                            </div>
+                            <p class="callout mt-3">Semua input nilai, absensi, ekstra, dan capaian hanya bisa ditulis pada periode aktif. Periode lain terbuka sebagai <b>Arsip</b> (hanya baca) di halaman Arsip.</p>
+                            <div id="ap-status" role="status" aria-live="polite" class="mt-2 text-sm font-bold min-h-[1.25rem]"></div>
                         </div>
                     </div>
                 </div>
