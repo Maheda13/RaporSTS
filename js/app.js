@@ -267,14 +267,27 @@
     ]
   };
   function buildMenu(role) {
-    const menu = $('#sidebar-menu'); menu.replaceChildren();
-    (MENUS[role] || MENUS['Guru Mapel']).forEach(([id, icon, title]) => {
-      const li = document.createElement('li'); li.className = 'mb-1';
-      const button = document.createElement('button');
-      button.type = 'button'; button.id = 'link-' + id; button.dataset.nav = id;
-      button.className = 'flex items-center px-4 py-3 nav-item rounded-lg transition w-full text-left';
-      button.innerHTML = '<i class="' + icon + ' w-6 mr-3 text-lg text-center" aria-hidden="true"></i><span class="font-medium">' + esc(title) + '</span>';
-      li.appendChild(button); menu.appendChild(li);
+    const items = MENUS[role] || MENUS['Guru Mapel'];
+    // Dua kontainer dengan gaya berbeda: tab pil di topbar (desktop) dan
+    // daftar vertikal di drawer (mobile). id unik — nav() menyorot keduanya.
+    const drawer = $('#sidebar-menu'); if (drawer) drawer.replaceChildren();
+    const top = $('#topnav-menu'); if (top) top.replaceChildren();
+    items.forEach(([id, icon, title]) => {
+      if (top) {
+        const tab = document.createElement('button');
+        tab.type = 'button'; tab.id = 'toplink-' + id; tab.dataset.nav = id;
+        tab.className = 'nav-item';
+        tab.innerHTML = esc(title);
+        top.appendChild(tab);
+      }
+      if (drawer) {
+        const li = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button'; button.id = 'link-' + id; button.dataset.nav = id;
+        button.className = 'nav-item';
+        button.innerHTML = '<i class="' + icon + '" aria-hidden="true"></i><span>' + esc(title) + '</span>';
+        li.appendChild(button); drawer.appendChild(li);
+      }
     });
     nav('p-dashboard');
   }
@@ -284,7 +297,10 @@
     const page = document.getElementById(id); if (!page) return;
     page.classList.remove('hidden'); $('#page-title').textContent = id.replace('p-','').replace(/-/g,' ').toUpperCase();
     $$('.nav-item').forEach(el => { el.classList.remove('active-nav'); el.removeAttribute('aria-current'); });
-    const link = $('#link-' + id); if (link) { link.classList.add('active-nav'); link.setAttribute('aria-current','page'); }
+    ['#link-','#toplink-'].forEach(sel => {
+      const link = $(sel + id);
+      if (link) { link.classList.add('active-nav'); link.setAttribute('aria-current','page'); }
+    });
     if (innerWidth < 768) closeSidebar();
   }
   function toggleSidebar() {
@@ -356,19 +372,19 @@
     if(k&&m&&s&&t) loadNilaiTable(k,m,s,t);
   }
   async function loadNilaiTable(k,m,s,t) {
-    const area=$('#n-table-area'); area.innerHTML='<div class="p-10 text-center text-gray-500" role="status" aria-live="polite">Memuat data…</div>';
+    const area=$('#n-table-area'); area.innerHTML='<div class="empty-state" role="status" aria-live="polite">Memuat data…</div>';
     try {
       const data=await api('getDataNilaiInput',{kelas:k,kodeMapel:m,semester:s,tahunAjaran:t});
-      if(!data || !data.length) { area.innerHTML='<div class="p-8 text-center text-gray-500">Belum ada siswa pada kelas ini.</div>'; return; }
-      let html='<table class="min-w-full divide-y divide-gray-200 border text-sm text-center"><thead class="bg-gray-100 text-gray-600 sticky top-0 z-20"><tr><th rowspan="2" class="px-4 text-left w-1/4 sticky left-0 bg-gray-100 z-30 border-r border-b">Nama Siswa</th><th colspan="5" class="border-b py-2">Ulangan Harian</th><th rowspan="2" class="border-l border-b bg-blue-50 w-24">STS</th><th rowspan="2" class="border-l border-b bg-green-50 w-24">SAS</th></tr><tr><th class="py-1">1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody class="bg-white divide-y">';
+      if(!data || !data.length) { area.innerHTML='<div class="empty-state">Belum ada siswa pada kelas ini.</div>'; return; }
+      let html='<table class="data-table" style="min-width:640px"><thead><tr><th rowspan="2" class="sticky sticky-end">Nama Siswa</th><th colspan="5" class="center">Ulangan Harian</th><th rowspan="2" class="center col-sts">STS</th><th rowspan="2" class="center col-sas">SAS</th></tr><tr><th class="center">1</th><th class="center">2</th><th class="center">3</th><th class="center">4</th><th class="center">5</th></tr></thead><tbody>';
       data.forEach(r=>{
-        html+='<tr data-nis="'+esc(r.nis)+'"><td class="px-4 py-2 text-left font-medium sticky left-0 bg-white border-r whitespace-nowrap">'+esc(r.nama)+'<br><span class="text-[10px] text-gray-400 font-normal">'+esc(r.nis)+'</span></td>';
-        [1,2,3,4,5].forEach(i=>html+='<td class="p-1"><input type="number" inputmode="decimal" class="grade-input uh'+i+'" value="'+esc(r['uh'+i]??'')+'" data-original-value="'+esc(r['uh'+i]??'')+'" min="0" max="100" step="1" aria-label="UH '+i+' — '+esc(r.nama)+'"></td>');
-        html+='<td class="p-1 border-l bg-blue-50/50"><input type="number" inputmode="decimal" class="grade-input sts" value="'+esc(r.sts??'')+'" data-original-value="'+esc(r.sts??'')+'" min="0" max="100" step="1" aria-label="STS — '+esc(r.nama)+'"></td>';
-        html+='<td class="p-1 border-l bg-green-50/50"><input type="number" inputmode="decimal" class="grade-input sas" value="'+esc(r.sas??'')+'" data-original-value="'+esc(r.sas??'')+'" min="0" max="100" step="1" aria-label="SAS — '+esc(r.nama)+'"></td></tr>';
+        html+='<tr data-nis="'+esc(r.nis)+'"><td class="sticky sticky-end" style="white-space:nowrap"><span class="font-semibold">'+esc(r.nama)+'</span><br><span class="text-[10px] text-gray-400 font-normal">'+esc(r.nis)+'</span></td>';
+        [1,2,3,4,5].forEach(i=>html+='<td class="center" style="padding:.4rem .3rem"><input type="number" inputmode="decimal" class="grade-input uh'+i+'" value="'+esc(r['uh'+i]??'')+'" data-original-value="'+esc(r['uh'+i]??'')+'" min="0" max="100" step="1" aria-label="UH '+i+' — '+esc(r.nama)+'"></td>');
+        html+='<td class="center col-sts" style="padding:.4rem .3rem"><input type="number" inputmode="decimal" class="grade-input sts" value="'+esc(r.sts??'')+'" data-original-value="'+esc(r.sts??'')+'" min="0" max="100" step="1" aria-label="STS — '+esc(r.nama)+'"></td>';
+        html+='<td class="center col-sas" style="padding:.4rem .3rem"><input type="number" inputmode="decimal" class="grade-input sas" value="'+esc(r.sas??'')+'" data-original-value="'+esc(r.sas??'')+'" min="0" max="100" step="1" aria-label="SAS — '+esc(r.nama)+'"></td></tr>';
       });
       area.innerHTML=html+'</tbody></table>'; gradeDirty=false; updateDirtyIndicator();
-    } catch(e) { area.innerHTML='<div class="p-8 text-center text-red-600" role="alert">'+esc(e.message)+'</div>'; }
+    } catch(e) { area.innerHTML='<div class="empty-state bad" role="alert">'+esc(e.message)+'</div>'; }
   }
   function getGradeFilters() {
     const k=$('#n-kelas').value,m=$('#n-mapel').value,s=$('#n-sem').value,t=$('#n-thn').value;
@@ -450,8 +466,8 @@
     if(!kelas||!semester||!tahunAjaran) return;
     try {
       const data=await api('getAbsensiSiswa',{kelas,semester,tahunAjaran});
-      let html='<table class="w-full text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-bold border-b sticky top-0"><tr><th class="px-4 py-3">Nama Siswa</th><th class="text-center w-24">Sakit</th><th class="text-center w-24">Izin</th><th class="text-center w-24">Alpha</th></tr></thead><tbody class="divide-y bg-white">';
-      data.forEach(r=>html+='<tr data-n="'+esc(r.nis)+'"><td class="px-4 py-2 font-medium">'+esc(r.nama)+'</td>'+['sakit','izin','alpha'].map((key,i)=>'<td class="p-1"><input type="number" class="attendance-input '+['s','i','a'][i]+'" value="'+esc(r[key])+'" min="0" step="1" aria-label="'+['Sakit','Izin','Alpha'][i]+' — '+esc(r.nama)+'"></td>').join('')+'</tr>');
+      let html='<table class="data-table"><thead><tr><th>Nama Siswa</th><th class="center col-sts">Sakit</th><th class="center">Izin</th><th class="center col-sas">Alpha</th></tr></thead><tbody>';
+      data.forEach(r=>html+='<tr data-n="'+esc(r.nis)+'"><td class="font-semibold">'+esc(r.nama)+'</td>'+['sakit','izin','alpha'].map((key,i)=>'<td class="center" style="padding:.4rem .3rem"><input type="number" class="attendance-input '+['s','i','a'][i]+'" value="'+esc(r[key])+'" min="0" step="1" aria-label="'+['Sakit','Izin','Alpha'][i]+' — '+esc(r.nama)+'"></td>').join('')+'</tr>');
       $('#a-table').innerHTML=html+'</tbody></table>';
     } catch(e) { $('#a-table').textContent=e.message; }
   }
@@ -472,8 +488,8 @@
     try {
       const data=await api('getSiswaByKelas',{kelas});
       const opts=(DATA.ekstrakurikuler||[]).map(e=>'<option value="'+esc(e[0])+'">'+esc(e[1])+'</option>').join('');
-      let html='<div class="min-w-[720px]"><table class="w-full text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-bold border-b sticky top-0"><tr><th class="px-4 py-3">Nama Siswa</th><th>Pilihan Ekstra 1</th><th class="w-24 text-center">Nilai</th><th>Pilihan Ekstra 2</th><th class="w-24 text-center">Nilai</th></tr></thead><tbody class="divide-y bg-white">';
-      data.forEach(r=>html+='<tr data-n="'+esc(r.nis)+'"><td class="px-4 py-2 font-medium">'+esc(r.nama)+'</td><td><select class="e1"><option value="">-</option>'+opts+'</select></td><td><select class="v1"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td><td><select class="e2"><option value="">-</option>'+opts+'</select></td><td><select class="v2"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td></tr>');
+      let html='<table class="data-table" style="min-width:720px"><thead><tr><th>Nama Siswa</th><th>Pilihan Ekstra 1</th><th class="center">Nilai</th><th>Pilihan Ekstra 2</th><th class="center">Nilai</th></tr></thead><tbody>';
+      data.forEach(r=>html+='<tr data-n="'+esc(r.nis)+'"><td class="font-semibold">'+esc(r.nama)+'</td><td><select class="e1"><option value="">-</option>'+opts+'</select></td><td class="center"><select class="v1"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td><td><select class="e2"><option value="">-</option>'+opts+'</select></td><td class="center"><select class="v2"><option value="">-</option><option>A</option><option>B</option><option>C</option></select></td></tr>');
       $('#e-table').innerHTML=html+'</tbody></table></div>';
     } catch(e) { $('#e-table').textContent=e.message; }
   }
@@ -498,16 +514,13 @@
     const isManual=mode==='m';
     manual.classList.toggle('hidden',!isManual); upload.classList.toggle('hidden',isManual);
     const btnM=$('#btn-m'),btnU=$('#btn-u');
-    const active='px-6 py-2 text-sm font-bold rounded-t-lg bg-[#B06161] text-white shadow-sm';
-    const idle='px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-t-lg';
-    btnM.className=active; btnU.className=idle;
-    if(!isManual){btnM.className=idle;btnU.className=active;}
+    // gaya tab ditentukan CSS lewat aria-selected — className tetap 'tab'
     btnM.setAttribute('aria-selected',String(isManual)); btnU.setAttribute('aria-selected',String(!isManual));
     // Pindah tab berarti tinggalkan tabel — konfirmasi bila ada perubahan belum disimpan.
     if(gradeDirty && !isManual && !pendingSave){
       if(!confirm('Ada nilai yang belum disimpan. Tetap pindah ke tab Upload Excel?')) {
         manual.classList.remove('hidden'); upload.classList.add('hidden');
-        btnM.className=active; btnU.className=idle; btnM.setAttribute('aria-selected','true'); btnU.setAttribute('aria-selected','false');
+        btnM.setAttribute('aria-selected','true'); btnU.setAttribute('aria-selected','false');
         return;
       }
     }
@@ -524,10 +537,15 @@
       const classes=Object.keys(data||{}).sort();
       if(!classes.length) { area.textContent='Belum ada data status untuk periode ini.'; return; }
       classes.forEach(k=>{
-        const card=document.createElement('div');card.className='bg-white rounded-lg border border-gray-200 shadow-sm mb-4 overflow-hidden';
-        const title=document.createElement('div');title.className='bg-gray-50 px-4 py-3 font-bold border-b text-gray-700 border-l-4 border-l-[#B06161]';title.textContent='Kelas '+k;card.appendChild(title);
-        const ul=document.createElement('ul');ul.className='divide-y divide-gray-100';
-        (data[k]||[]).forEach(item=>{const li=document.createElement('li');li.className='px-4 py-2.5 flex justify-between items-center text-sm';const name=document.createElement('span');name.className='font-medium text-gray-600';name.textContent=item.mapel;const badge=document.createElement('span');badge.className='text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider '+(item.status==='Lengkap'?'bg-green-100 text-green-800':'bg-red-100 text-red-800');badge.textContent=item.status;li.append(name,badge);ul.appendChild(li);});
+        const card=document.createElement('div');card.className='status-card';
+        const title=document.createElement('div');title.className='status-card-head';
+        const label=document.createElement('span');label.textContent='Kelas '+k;title.appendChild(label);
+        const total=(data[k]||[]).length, lengkap=(data[k]||[]).filter(x=>x.status==='Lengkap').length;
+        const pct=document.createElement('span');pct.className='badge '+(lengkap===total?'badge-ok':lengkap?'badge-warn':'badge-bad');
+        pct.textContent=lengkap+'/'+total;title.appendChild(pct);
+        card.appendChild(title);
+        const ul=document.createElement('ul');
+        (data[k]||[]).forEach(item=>{const li=document.createElement('li');li.className='status-row';const name=document.createElement('span');name.className='name';name.textContent=item.mapel;const badge=document.createElement('span');badge.className='badge '+(item.status==='Lengkap'?'badge-ok':'badge-bad');badge.textContent=item.status;li.append(name,badge);ul.appendChild(li);});
         card.appendChild(ul);area.appendChild(card);
       });
     } catch(e) { $('#s-area').textContent=e.message; }
@@ -547,19 +565,19 @@
     try {
       const d=await api('getRaportData',{nis,semester,tahunAjaran,jenisRapor}); CURRENT_RAPOR_DATA=d;
       const area=$('#r-preview'); area.replaceChildren();
-      const summary=document.createElement('div');summary.className='mb-4 p-5 bg-blue-50/50 border border-blue-200 rounded-xl flex justify-between items-center';
-      const left=document.createElement('div');const name=document.createElement('h5');name.className='font-bold text-blue-900 text-lg';name.textContent=d.siswa.nama;const meta=document.createElement('p');meta.className='text-sm text-blue-600 mt-1 font-medium';meta.textContent='NIS: '+d.siswa.nis+' | Kelas: '+d.siswa.kelas;left.append(name,meta);
-      const right=document.createElement('div');right.className='text-right text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-blue-100 shadow-sm';right.textContent=d.meta.sem+' · '+d.meta.thn+' · '+d.meta.jenis;summary.append(left,right);area.appendChild(summary);
-      const table=document.createElement('table');table.className='w-full text-sm border border-gray-200 mb-6 bg-white rounded-lg';
-      const header=document.createElement('thead');header.className='bg-gray-100 border-b border-gray-200 text-gray-700';header.innerHTML='<tr><th class="p-3 text-left">Mata Pelajaran</th><th class="p-3 text-center w-24">Nilai Akhir</th><th class="p-3 text-left">Deskripsi Capaian</th></tr>';
-      const tbody=document.createElement('tbody');tbody.className='divide-y divide-gray-100';
-      (d.nilai||[]).forEach(n=>{const tr=document.createElement('tr');[n.mapel,n.nilai,n.capaian].forEach((v,i)=>{const td=document.createElement('td');td.className='p-3 '+(i===1?'text-center font-bold text-lg text-[#B06161]':i===0?'font-medium text-gray-800':'text-xs text-gray-600 leading-relaxed');td.textContent=v;tr.appendChild(td);});tbody.appendChild(tr);});
+      const summary=document.createElement('div');summary.className='preview-summary';
+      const left=document.createElement('div');const name=document.createElement('p');name.className='who';name.textContent=d.siswa.nama;const meta=document.createElement('p');meta.className='meta';meta.textContent='NIS: '+d.siswa.nis+'  ·  Kelas: '+d.siswa.kelas;left.append(name,meta);
+      const right=document.createElement('div');right.className='period';right.textContent=d.meta.sem+' · '+d.meta.thn+' · '+d.meta.jenis;summary.append(left,right);area.appendChild(summary);
+      const table=document.createElement('table');table.className='data-table mb-5';
+      const header=document.createElement('thead');header.innerHTML='<tr><th>Mata Pelajaran</th><th class="center" style="width:8rem">Nilai Akhir</th><th>Deskripsi Capaian</th></tr>';
+      const tbody=document.createElement('tbody');
+      (d.nilai||[]).forEach(n=>{const tr=document.createElement('tr');[n.mapel,n.nilai,n.capaian].forEach((v,i)=>{const td=document.createElement('td');td.className=(i===1?'center font-bold text-lg text-[#B06161]':i===0?'font-semibold':'text-xs text-gray-600 leading-relaxed');td.textContent=v;tr.appendChild(td);});tbody.appendChild(tr);});
       table.append(header,tbody);area.appendChild(table);
-      const sign=document.createElement('label');sign.className='mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center font-bold text-sm text-gray-700';
-      const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id='r-ttd';checkbox.className='w-5 h-5 mr-3';
+      const sign=document.createElement('label');sign.className='sign-check';
+      const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id='r-ttd';
       sign.append(checkbox,document.createTextNode('Tampilkan Tanda Tangan Wali Kelas ('+d.waliKelas+')'));area.appendChild(sign);
-      const one=document.createElement('button');one.type='button';one.className='w-full bg-[#B06161] text-white font-bold py-3.5 rounded-xl shadow-lg';one.dataset.action='doPrint';one.innerHTML='<i class="fas fa-file-pdf mr-2" aria-hidden="true"></i> Buat & Buka PDF Rapor';area.appendChild(one);
-      const all=document.createElement('button');all.type='button';all.className='w-full mt-3 bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-lg';all.dataset.action='bulkPrint';all.innerHTML='<i class="fas fa-copy mr-2" aria-hidden="true"></i> Cetak Semua Rapor Kelas '+esc(d.siswa.kelas)+' (seluruh kelas)';area.appendChild(all);
+      const one=document.createElement('button');one.type='button';one.className='btn-primary btn-block';one.dataset.action='doPrint';one.innerHTML='<i class="fas fa-file-pdf mr-2" aria-hidden="true"></i> Buat & Buka PDF Rapor';area.appendChild(one);
+      const all=document.createElement('button');all.type='button';all.className='btn-secondary btn-block mt-3';all.dataset.action='bulkPrint';all.innerHTML='<i class="fas fa-copy mr-2" aria-hidden="true"></i> Cetak Semua Rapor Kelas '+esc(d.siswa.kelas)+' (seluruh kelas)';area.appendChild(all);
       area.classList.remove('hidden');
     } catch(e) { toast(e.message,false); }
     finally { setBusy(button||$('[data-action="previewRapor"]'),false); }
@@ -616,14 +634,14 @@
       const data=await api('getMonitoringData',{kelas,semester,tahun});
       const head=$('#m-table-head'),body=$('#m-table-body');
       head.replaceChildren();body.replaceChildren();
-      if(!data.siswa||!data.siswa.length) { const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=100;td.className='p-8 text-center text-gray-500';td.textContent='Belum ada data untuk kelas/periode ini.';tr.appendChild(td);body.appendChild(tr);return; }
+      if(!data.siswa||!data.siswa.length) { const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=100;td.className='empty-state';td.textContent='Belum ada data untuk kelas/periode ini.';tr.appendChild(td);body.appendChild(tr);return; }
       const hr=document.createElement('tr');
-      ['NIS','Nama Siswa',...(data.codes||[]).map(c=>c), 'S','I','A','Ekstrakurikuler'].forEach((label,i)=>{const th=document.createElement('th');th.className='p-3 border min-w-[80px] '+(i===1?'sticky left-0 bg-gray-200 z-10 shadow-md':'');th.textContent=label;if(i>=2&&i<2+(data.codes||[]).length)th.title=data.names[label]||label;hr.appendChild(th);});head.appendChild(hr);
-      data.siswa.forEach(s=>{const tr=document.createElement('tr');tr.className='hover:bg-blue-50';
-        const add=(v,cls)=>{const td=document.createElement('td');td.className='p-3 border '+(cls||'');td.textContent=v===null||v===undefined?'':String(v);tr.appendChild(td);};
-        add(s.nis,'text-center');add(s.nama,'font-bold sticky left-0 bg-white z-10 shadow-md');
-        (data.codes||[]).forEach(c=>{const v=s.nilai[c];if(!v){const td=document.createElement('td');td.className='p-3 border text-center text-red-400';td.textContent='×';td.setAttribute('aria-label','Belum diisi');tr.appendChild(td);}else add(v,'text-center');});
-        add(s.absen.s,'text-center bg-yellow-50');add(s.absen.i,'text-center bg-blue-50');add(s.absen.a,'text-center bg-red-50');add(s.ekskul,'text-xs');body.appendChild(tr);
+      ['NIS','Nama Siswa',...(data.codes||[]).map(c=>c), 'S','I','A','Ekstrakurikuler'].forEach((label,i)=>{const th=document.createElement('th');th.className=(i===1?'sticky sticky-end':'')+(i>=2&&i<2+(data.codes||[]).length?' center':'');th.textContent=label;if(i>=2&&i<2+(data.codes||[]).length)th.title=data.names[label]||label;hr.appendChild(th);});head.appendChild(hr);
+      data.siswa.forEach(s=>{const tr=document.createElement('tr');
+        const add=(v,cls)=>{const td=document.createElement('td');td.className=(cls||'')+(v===null||v===undefined?'':'');td.textContent=v===null||v===undefined?'':String(v);tr.appendChild(td);};
+        add(s.nis,'center');add(s.nama,'font-semibold sticky sticky-end');
+        (data.codes||[]).forEach(c=>{const v=s.nilai[c];if(!v){const td=document.createElement('td');td.className='center font-bold text-red-400';td.textContent='×';td.setAttribute('aria-label','Belum diisi');tr.appendChild(td);}else add(v,'center');});
+        add(s.absen.s,'center col-sts');add(s.absen.i,'center');add(s.absen.a,'center col-sas');add(s.ekskul,'text-xs');body.appendChild(tr);
       });
     } catch(e) { toast(e.message,false); }
     finally { setBusy(button||$('[data-action="loadMonitoring"]'),false); }
