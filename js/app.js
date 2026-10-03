@@ -12,6 +12,11 @@
   let toastTimer = 0;
   let navSeq = 0;          // guard navigasi async: hasil lambat tak menimpa klik berikutnya
   let activeRaporTab = 'aktif';   // tab rapor yang sedang aktif ('aktif'|'arsip')
+  // Username yang sedang wajib reset password. Disimpan di state (Tahap 12):
+  // form reset tak lagi punya input username, hanya verifikasi password lama
+  // + password baru + konfirmasi — password lama TETAP WAJIB sebagai bukti
+  // identitas (resetPassword_ gagal tanpa bukti itu).
+  let resetUsername = '';
 
   const PERIOD_OPTIONS = [
     ['Ganjil', '2025/2026'], ['Genap', '2025/2026'],
@@ -331,7 +336,7 @@
   function runAction(name, button) {
     const actions = {
       login: handleLogin, logout: handleLogout, toggleSidebar, saveCapaian,
-      saveNilaiManual, uploadNilai, saveAbsen, saveEkstra, loadStatus,
+      saveNilaiManual, uploadNilai, downloadGradeTemplate, saveAbsen, saveEkstra, loadStatus,
       previewRapor, doPrint, bulkPrint, changePw, loadMonitoring,
       loadSiswaList, saveSiswa, resetSiswaForm, editSiswa, resetAccountFlag, resetAccountTemp,
       saveUserAccount, loadAccounts, saveAssignment, loadProgressSummary,
@@ -359,7 +364,7 @@
     try {
       const result = await api('login', { username, password }, { auth: false });
       if (result && result.resetRequired) {
-        $('#reset-username').value = result.username;
+        resetUsername = result.username;   // input username dihapus dari form (Tahap 12)
         $('#reset-view').classList.remove('hidden');
         $('#login-view').classList.add('hidden');
       } else if (result && result.token && result.user) {
@@ -371,7 +376,7 @@
   }
 
   async function submitPasswordReset() {
-    const username = $('#reset-username').value;
+    const username = resetUsername;   // diambil dari state, bukan input yang sudah dihapus
     const oldPassword = $('#reset-old-password').value;
     const newPassword = $('#reset-new-password').value;
     const confirmPassword = $('#reset-confirm-password').value;
@@ -941,6 +946,39 @@
       safeMsg('n-status-u',result.saved+' nilai tersimpan.',true); gradeDirty=false; await loadDash();
     } catch(e) { safeMsg('n-status-u',e.message,false); }
     finally { setBusy(button||$('[data-action="uploadNilai"]'),false); }
+  }
+  /**
+   * Unduh template Excel untuk tab Upload Excel (Tahap 12).
+   *
+   * Urutan header MENGIKUTI parser uploadNilai() persis (A1 = header, kolom
+   * berdasarkan posisi — server tidak membaca judul kolom):
+   *   0 NIS | 1 Nama | 2 UH1 | 3 UH2 | 4 UH3 | 5 UH4 | 6 UH5 | 7 STS | 8 SAS
+   *
+   * Baris data hanya NIS + Nama; SEMUA kolom nilai dibiarkan kosong. Nilai kosong
+   * dilewati parser (undefined) → simpan mempertahankan nilai lama, jadi template
+   * selalu aman diunggah ulang tanpa menghapus apa pun.
+   * Periode TIDAK ditulis ke file: unggah memakai select terkunci di halaman.
+   */
+  async function downloadGradeTemplate(button) {
+    let f; try { f = getGradeFilters(); } catch(e) { return toast(e.message, false); }
+    setBusy(button||$('[data-action="downloadGradeTemplate"]'), true, 'Membuat template…');
+    try {
+      const siswa = await api('getSiswaByKelas', { kelas: f.k });
+      if (!siswa || !siswa.length) { toast('Belum ada siswa pada kelas ' + f.k + '.', false); return; }
+      const header = ['NIS','Nama','UH1','UH2','UH3','UH4','UH5','STS','SAS'];
+      // NIS ditulis apa adanya (string dari API) → cell teks, Excel tidak
+      // mengubahnya ke notasi ilmiah. Kolom nilai = string kosong.
+      const aoa = [header, ...siswa.map(s => [String(s.nis), s.nama, '', '', '', '', '', '', ''])];
+      const sheet = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      // Nama sheet maksimal 31 karakter (batas Excel).
+      const sheetName = ('Nilai ' + f.k + ' ' + f.mn).slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, sheet, sheetName);
+      const file = 'template-nilai-' + f.m + '-' + f.k.replace(/\s+/g, '-') + '.xlsx';
+      XLSX.writeFile(wb, file);
+      safeMsg('n-status-u', 'Template ' + file + ' terunduh (' + siswa.length + ' siswa).', true);
+    } catch(e) { toast(e.message, false); }
+    finally { setBusy(button||$('[data-action="downloadGradeTemplate"]'), false); }
   }
   function renderUploadProblems(list) {
     const el=$('#upload-problems'); if(!el) return;
