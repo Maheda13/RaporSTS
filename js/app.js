@@ -212,17 +212,8 @@
       setOptions($('#ap-thn'), [...new Set(free.map(x => x[1]))]);
       if (aktif) { $('#ap-sem').value = aktif.semester; $('#ap-thn').value = aktif.tahunAjaran; }
     }
-    ['n','a','e','r','c'].forEach(prefix => {
-      const chip = $('[data-period-chip="' + prefix + '"]');
-      if (chip) {
-        chip.replaceChildren();
-        if (aktif) {
-          chip.append('Periode aktif: ');
-          const strong = document.createElement('strong'); strong.textContent = aktif.semester + ' ' + aktif.tahunAjaran;
-          chip.appendChild(strong);
-        } else chip.textContent = 'Periode aktif belum ditetapkan';
-      }
-    });
+    // Sumber tampilan periode kini HANYA badge header #period-badge (Tahap 12):
+    // chip 'Periode aktif' per-form dihapus karena menduplikasi badge yang sama.
     const badge = $('#period-badge');
     if (badge) {
       badge.classList.toggle('hidden', !aktif);
@@ -481,28 +472,72 @@
     const isTeacher = USER.role === 'Guru Mapel' || USER.role === 'Wali Kelas';
     $('#dash-stats')?.classList.toggle('hidden', isTeacher);
     $('#dash-workbench')?.classList.toggle('hidden', !isTeacher);
-    // Tab rapor default per role; Guru Mapel tidak punya panel "Periode Aktif"
-    // (server menolak getRaportData via assertClassAccess_).
-    activeRaporTab = USER.role === 'Guru Mapel' ? 'arsip' : 'aktif';
-    $('#rapor-tab-active')?.classList.toggle('hidden', USER.role !== 'Admin' && USER.role !== 'Wali Kelas');
+    // Tahap 12: rapor HANYA untuk Wali Kelas (server: assertReportAccess_).
+    // Arsip disembunyikan sementara (ARCHIVE_HIDDEN) → tak ada pilihan tab.
+    activeRaporTab = 'aktif';
+    $('#rapor-tablist')?.classList.toggle('hidden', ARCHIVE_HIDDEN);
     popDrops();
     buildMenu(USER.role);
     if (stats) renderDashStats(stats);
     // Statistik bisa saja gagal (bukan error auth) → muat lagi di latar belakang.
     if (!stats) loadDash();
     if (isTeacher) loadWorkbench();
+    // Tahap 11: panen baca murni di latar belakang sesaat setelah shell tampil —
+    // BUKAN di depan paint (login sudah menambah 3 request berurutan; menumpuknya
+    // di awal hanya memindahkan antrean). Tanpa `await`: tidak menahan siapa pun,
+    // dan kegagalan sengaja dibiarkan diam (bukan toast saat boot).
+    schedulePrefetch();
   }
   function renderDashStats(s) {
     $('#dash-siswa').textContent = s.siswa; $('#dash-kelas').textContent = s.kelas;
     $('#dash-mapel').textContent = s.mapel; $('#dash-nilai').textContent = s.nilai;
   }
 
+  /**
+   * Tahap 11: panen data baca murni di latar belakang, mengikuti MENU role.
+   *
+   * Kunci: payload dibaca dari DOM yang SAMA seperti saat halaman dibuka, jadi
+   * key cache identik → buka tab sungguhan tinggal pakai isi cache. Tanpa
+   * `await`, tanpa spinner, kegagalan senyap (sengaja — prefetch di boot tak
+   * boleh menampilkan toast). Bukan `getDataNilaiInput`/`getAbsensiSiswa`/
+   * `getNilaiEkstra`: nilai & absensi TIDAK pernah di-cache (nilai basi
+   * mengundang user mengedit data yang sudah berubah).
+   */
+  function schedulePrefetch() {
+    const idle = window.requestIdleCallback || (fn => setTimeout(fn, 200));
+    idle(() => {
+      if (!USER) return;                       // logout menyusul → jangan apa-apakan
+      const menu = MENUS[USER.role] || [];
+      const has = id => menu.some(m => m[0] === id);
+      const silent = { silent: true };
+      const fire = (action, payload) => {
+        try { api(action, payload, silent).catch(() => {}); } catch (_) { /* abaikan */ }
+      };
+      // Status Nilai — Admin / Guru Mapel / Wali Kelas / Waka.
+      if (has('p-status')) {
+        const sem = $('#s-sem')?.value, thn = $('#s-thn')?.value;
+        if (sem && thn) fire('getUploadStatus', { semester: sem, tahunAjaran: thn });
+      }
+      // Akun & Penugasan + Data Siswa — memuat 1 respons untuk 2 halaman.
+      if (has('p-akun') || has('p-plotting')) fire('getAssignmentList', {});
+      if (has('p-siswa')) fire('getSiswaList', { kelas: ($('#w-kelas')?.value || '') });
+      // Rekap progres + leger — hanya Admin & Waka Kurikulum.
+      if (has('p-monitor')) {
+        const s = $('#sum-sem')?.value, t = $('#sum-thn')?.value;
+        if (s && t) fire('getProgressSummary', { semester: s, tahunAjaran: t });
+        const mk = $('#m-kelas')?.value, ms = $('#m-sem')?.value, mt = $('#m-thn')?.value;
+        if (mk && ms && mt) fire('getMonitoringData', { kelas: mk, semester: ms, tahun: mt });
+      }
+    });
+  }
+
   // -------------------------------------------------------------- Navigation
   const MENUS = {
+    // Tahap 12: 'p-rapor' HANYA di Wali Kelas — server menolak role lain
+    // (assertReportAccess_). Menu Admin & Guru Mapel tanpa Rapor.
     'Guru Mapel': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-capaian','fas fa-book','Input Capaian'],
-      ['p-nilai','far fa-file-alt','Input Nilai'], ['p-status','fas fa-chart-line','Status Nilai'],
-      ['p-rapor','fas fa-print','Rapor']
+      ['p-nilai','far fa-file-alt','Input Nilai'], ['p-status','fas fa-chart-line','Status Nilai']
     ],
     'Wali Kelas': [
       ['p-dashboard','fas fa-home','Dashboard'], ['p-absen','fas fa-user-clock','Absensi'],
@@ -513,7 +548,7 @@
       ['p-dashboard','fas fa-home','Dashboard'], ['p-capaian','fas fa-book','Input Capaian'],
       ['p-nilai','far fa-file-alt','Input Nilai'], ['p-absen','fas fa-user-clock','Absensi'],
       ['p-ekstra','fas fa-running','Ekstrakurikuler'], ['p-status','fas fa-chart-line','Status Nilai'],
-      ['p-rapor','fas fa-print','Rapor'], ['p-siswa','fas fa-user-graduate','Data Siswa'],
+      ['p-siswa','fas fa-user-graduate','Data Siswa'],
       ['p-akun','fas fa-user-shield','Akun & Reset'], ['p-plotting','fas fa-diagram-project','Penugasan'],
       ['p-monitor','fas fa-chart-pie','Pantau Kelengkapan']
     ],
@@ -526,6 +561,13 @@
       ['p-monitor','fas fa-chart-pie','Pantau Kelengkapan']
     ]
   };
+  /**
+   * Arsip rapor DISEMBUNYIKAN sementara (Tahap 12): roster diambil dari
+   * `Data Siswa` SEKARANG sehingga nama siswa tahun lama bisa salah. Aksi
+   * `getArchiveNilai` di server TIDAK dihapus — kembalikan nilai ini ke false
+   * untuk menampilkan tab Arsip lagi (bugnya tetap harus diperbaiki dulu).
+   */
+  const ARCHIVE_HIDDEN = true;
   function buildMenu(role) {
     // Role tak dikenal → menu minimal. getInitialData_ mengembalikan data KOSONG
     // untuk role tak dikenal, jadi menampilkan menu penuh hanya berisi halaman error.
@@ -574,6 +616,12 @@
 
   async function nav(id) {
     const seq = ++navSeq;
+    // Tahap 12: id di luar menu role tidak dibuka (Uji memanggil nav('p-rapor')
+    // dari konsol — data server tetap ditolak, tapi panel kosong menyesatkan).
+    // Fallback ke dashboard; 'p-pass' selalu diizinkan (pintu profil, tak ada
+    // di MENUS mana pun).
+    const allowed = (MENUS[USER && USER.role] || [['p-dashboard'], ['p-pass']]).map(m => m[0]);
+    if (allowed.indexOf(id) < 0 && id !== 'p-pass') id = 'p-dashboard';
     if (gradeDirty && id !== 'p-nilai') {
       const ok = await confirmBar('Ada perubahan nilai yang belum disimpan. Tinggalkan halaman?');
       if (!ok || seq !== navSeq) return;
@@ -628,14 +676,16 @@
   }
   /** Ganti panel rapor (Periode Aktif | Arsip). Inisialisasi arsip dipanggil di sini. */
   function switchRaporTab(tab, silent) {
-    activeRaporTab = tab === 'arsip' ? 'arsip' : 'aktif';
+    // Arsip disembunyikan sementara (Tahap 12) → selalu paksa tab Aktif walau
+    // ada yang mengirim 'arsip' dari panel/URL lama.
+    activeRaporTab = (ARCHIVE_HIDDEN || tab !== 'arsip') ? 'aktif' : 'arsip';
     const showAktif = activeRaporTab === 'aktif';
     $('#p-cetak')?.classList.toggle('hidden', !showAktif);
-    $('#p-arsip')?.classList.toggle('hidden', showAktif);
+    $('#p-arsip')?.classList.toggle('hidden', showAktif || ARCHIVE_HIDDEN);
     $('#rapor-tab-active')?.setAttribute('aria-selected', String(showAktif));
     $('#rapor-tab-archive')?.setAttribute('aria-selected', String(!showAktif));
-    if (!showAktif) archiveOptions();   // isi filter arsip + gate blok cetak per role
-    else {
+    if (!showAktif && !ARCHIVE_HIDDEN) archiveOptions();   // isi filter arsip + gate blok cetak per role
+    else if (showAktif) {
       // Preselect kelas di popDrops tidak memicu loadSiswa (guard isTrusted),
       // jadi muat daftar siswa cetak di sini agar tab Aktif tidak pernah kosong.
       const kelas = $('#r-kelas');

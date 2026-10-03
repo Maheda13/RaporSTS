@@ -22,7 +22,7 @@
   // mengedit source (mis. ditanam oleh GitHub Actions).
   // ---------------------------------------------------------------------------
   var CONFIG = {
-    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbwMiY03Gucb43oa4XnUIjMZLGFQEb0of7lpv5cjcK29Izezk4hleEUX_RXtgByvsFdszQ/exec',
+    apiUrl: global.ERAPOR_API_URL || '',
     mode: 'direct' // 'direct' | 'proxy'
   };
 
@@ -38,6 +38,73 @@
     session.user = cached ? JSON.parse(cached) : null;
   } catch (_) { session.user = null; }
 
+  // ---------------------------------------------------------------- read cache
+  // Tahap 11: cache baca jangka pendek agar berpindah tab tidak selalu minta
+  // data lagi (prefetchRole() mengisinya sesaat setelah shell tampil).
+  //
+  // ATURAN (sengaja selektif):
+  //  - HANYA READ_CACHE_ACTIONS yang boleh di-cache: monitor/metadata murni baca.
+  //  - Nilai & absensi TIDAK pernah: angka basi di form input lebih berbahaya
+  //    daripada menunggu (user bisa mengedit data yang sudah berubah).
+  //  - sessionStorage, BUKAN localStorage: hilang saat tab ditutup, jadi data
+  //    tidak tertinggal di komputer bersama; token pun tidak ikut disimpan.
+  //  - TTL pendek (60 dtk).
+  var READ_CACHE_ACTIONS = [
+    'getUploadStatus',       // Status Nilai (per role)
+    'getProgressSummary',    // rekap progres Admin/Waka
+    'getMonitoringData',     // leger Admin/Waka
+    'getAssignmentList'      // metadata akun & penugasan — 1 baca untuk 2 halaman
+  ];
+  // Seluruh aksi BACA di routeRequest_ (mirror code.gs — bukan prefiks `get*`,
+  // supaya aksi tulis yang namanya tak biasa tetap terbaca sebagai tulis).
+  //
+  // Invalidasi: aksi DI LUAR daftar ini (semua tulis, dan aksi tak dikenal)
+  // membuang seluruh cache. Arah gagal ini sengaja aman: aksi tulis baru yang
+  // kelak lupa dicatat di sini justru merusak cache (refetch) — bukan
+  // menyajikan data basi. Sebaliknya aksi baca baru yang lupa dicatat hanya
+  // membuat prefetch tidak terpakai; tetap tidak berbahaya.
+  var READ_ACTIONS = [
+    'validateSession', 'getInitialData', 'getDashboardStats', 'getCapaian',
+    'getDataNilaiInput', 'getAbsensiSiswa', 'getSiswaByKelas', 'getUploadStatus',
+    'getRaportData', 'getMonitoringData', 'getArchiveNilai', 'getMyWorkbench',
+    'getNilaiEkstra', 'getProgressSummary', 'getSiswaList', 'getAssignmentList'
+  ];
+  var READ_CACHE_TTL_ = 60000;
+  var READ_CACHE_NS_ = 'rCache.1.';
+  var inflight_ = Object.create(null);
+
+  /** sessionStorage bisa melempar (private mode / quota) → nonaktifkan cache saja. */
+  function cacheStore_() {
+    try { return global.sessionStorage || null; } catch (_) { return null; }
+  }
+  function cacheKey_(action, payload) {
+    var role = (session.user && session.user.role) || '';
+    var p = payload || {};
+    var q = Object.keys(p).sort().map(function (k) { return k + '=' + String(p[k]); }).join('&');
+    return READ_CACHE_NS_ + session.token + '.' + role + '.' + action + '.' + q;
+  }
+  function cacheGet_(key) {
+    var st = cacheStore_(); if (!st) return undefined;
+    try {
+      var raw = st.getItem(key); if (raw === null) return undefined;
+      var o = JSON.parse(raw);
+      if (!o || typeof o.t !== 'number' || Date.now() - o.t > READ_CACHE_TTL_) { st.removeItem(key); return undefined; }
+      return o.v;
+    } catch (_) { return undefined; }
+  }
+  function cachePut_(key, value) {
+    var st = cacheStore_(); if (!st) return;
+    try { st.setItem(key, JSON.stringify({ v: value, t: Date.now() })); } catch (_) { /* quota */ }
+  }
+  function clearReadCache_() {
+    var st = cacheStore_(); if (!st) return;
+    try {
+      var drop = [];
+      for (var i = 0; i < st.length; i++) { var k = st.key(i); if (k && k.indexOf(READ_CACHE_NS_) === 0) drop.push(k); }
+      drop.forEach(function (k) { st.removeItem(k); });
+    } catch (_) { /* abaikan */ }
+  }
+
   // ---------------------------------------------------------------- utilities
   function endpoint() {
     if (CONFIG.apiUrl) return CONFIG.apiUrl;
@@ -45,8 +112,12 @@
   }
 
   function setSession(token, user) {
-    session.token = token || '';
-    session.user = user || null;
+    var nextToken = token || '';
+    var nextUser = user || null;
+    // Pergantian login/role harus melepas snapshot sesi sebelumnya dari tab.
+    if (session.token !== nextToken || JSON.stringify(session.user) !== JSON.stringify(nextUser)) clearReadCache_();
+    session.token = nextToken;
+    session.user = nextUser;
     if (token) global.localStorage.setItem(TOKEN_KEY, token);
     else global.localStorage.removeItem(TOKEN_KEY);
     if (user) global.localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -86,6 +157,8 @@
   function api(action, payload, opts) {
     opts = opts || {};
     var auth = opts.auth !== false;
+    var isRead = auth && READ_CACHE_ACTIONS.indexOf(action) >= 0 && opts.cache !== false;
+    var cacheKey = isRead ? cacheKey_(action, payload) : null;
 
     var body = { action: action, payload: payload || {} };
     if (auth) {
@@ -95,6 +168,22 @@
       body.token = session.token;
     }
 
+    // Invalidasi: aksi DI LUAR READ_ACTIONS (semua tulis + aksi tak dikenal)
+    // membuang seluruh cache → data basi tidak pernah terpakai. Baca biasa
+    // (mis. getDataNilaiInput saat membuka Input) TIDAK menghapus cache:
+    // baca tidak memutasi data, jadi prefetch tetap berguna.
+    // Dilakukan SETELAH auth lolos agar request gagal tak menghapus cache benar.
+    if (READ_ACTIONS.indexOf(action) < 0) clearReadCache_();
+
+    // Aksi terdaftar (baca murni) → pakai cache kalau masih hidup, atau gabung
+    // request yang SEDANG berjalan (prefetch di latar belakang) supaya membuka
+    // tab saat prefetch belum selesai tidak menghasilkan 2 request identik.
+    if (cacheKey) {
+      var hit = cacheGet_(cacheKey);
+      if (hit !== undefined) return Promise.resolve(hit);
+      if (inflight_[cacheKey]) return inflight_[cacheKey];
+    }
+
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timeout = setTimeout(function () { if (controller) controller.abort(); }, opts.timeout || 60000);
 
@@ -102,7 +191,7 @@
     // bertahap sudah memberi umpan balik) supaya overlay tidak berkedip dobel.
     var silent = !!opts.silent;
     if (!silent) spin(true);
-    return fetch(endpoint(), {
+    var req = fetch(endpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify(body),
@@ -119,7 +208,9 @@
           if (parsed && parsed.ok === false && parsed.error) {
             throw makeError(parsed.error.code || 'UNKNOWN', parsed.error.message || 'Permintaan gagal.');
           }
-          return parsed ? parsed.data : null;
+          var result = parsed ? parsed.data : null;
+          if (cacheKey) cachePut_(cacheKey, result);
+          return result;
         });
       })
       .catch(function (err) {
@@ -135,7 +226,13 @@
       .finally(function () {
         clearTimeout(timeout);
         if (!silent) spin(false);
+        if (cacheKey) delete inflight_[cacheKey];
       });
+    // Bergabung dengan request identik yang sedang berjalan (prefetch vs klik
+    // tab hampir bersamaan). Di-registrasi setelah dibentuk supaya promise sudah
+    // lengkap sebelum dipakai pemanggil lain.
+    if (cacheKey) inflight_[cacheKey] = req;
+    return req;
   }
 
   function makeError(code, message) {
