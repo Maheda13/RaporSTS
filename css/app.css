@@ -307,16 +307,9 @@ textarea.input-field { height: auto; min-height: 7rem; padding: .75rem .9rem; re
   padding: .3rem .7rem; flex: none;
 }
 .period-badge::before { content: '🗓'; font-size: .8rem; }
-/* Chip di filter bar input — menggantikan dua dropdown terkunci yang tampak
-   "bisa dipilih tapi tidak bisa". Select asli tetap ada (hidden secara visual)
+/* Periode input ditampilkan HANYA lewat #period-badge di header (Tahap 12);
+   chip per-form sudah dihapus. Select asli tetap ada (hidden secara visual)
    supaya getGradeFilters() tetap terbaca & jangkar test tidak rusak. */
-.chip-period {
-  display: inline-flex; align-items: center; gap: .45rem;
-  font-size: .78rem; font-weight: 700; color: var(--ink-2);
-  background: var(--surface); border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm); padding: .55rem .8rem;
-}
-.chip-period strong { color: var(--primary-color); }
 .period-field { display: none; }   /* select terkunci: tak terlihat, masih terbaca */
 /* Bar konfirmasi inline (pengganti dialog native). */
 .confirm-bar {
