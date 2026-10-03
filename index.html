@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="eRapor DAFI — Sistem Penilaian Terpadu SMP DAFI">
-    <title>eRapor DAFI 5.1</title>
+    <meta name="description" content="eRapor DAFI — Sistem Penilaian Terpadu SMP-MA DAFI">
+    <title>eRapor DAFI</title>
 
     <!-- Konfigurasi endpoint API (bisa ditimpa dari luar tanpa edit source) -->
     <script>
@@ -29,8 +29,8 @@
     <div id="login-view" class="auth-shell">
         <div class="auth-card">
             <div class="auth-mark" aria-hidden="true"><i class="fas fa-graduation-cap"></i></div>
-            <h1 class="auth-title">eRapor DAFI 5.1</h1>
-            <p class="auth-sub">Sistem Penilaian Terpadu SMP DAFI</p>
+            <h1 class="auth-title">eRapor DAFI</h1>
+            <p class="auth-sub">Sistem Penilaian Terpadu SMP-MA DAFI</p>
 
             <div id="login-error" role="alert" class="inline-msg err hidden mb-5"></div>
 
@@ -85,10 +85,6 @@
                Masukkan password lama terlebih dahulu.</p>
 
             <form class="space-y-4" onsubmit="event.preventDefault(); submitPasswordReset();">
-                <div>
-                    <label for="reset-username" class="field-label">Username</label>
-                    <input type="text" id="reset-username" class="input-field" readonly>
-                </div>
                 <div>
                     <label for="reset-old-password" class="field-label">Password Lama</label>
                     <input type="password" id="reset-old-password" class="input-field" autocomplete="current-password" required>
@@ -179,7 +175,7 @@
                     <div class="hero">
                         <p class="hero-kicker">Selamat datang kembali</p>
                         <h3 class="hero-title">Halo, <span id="dash-greeting-name">Guru</span>.</h3>
-                        <p class="hero-sub">Sistem rapor digital terintegrasi SMP DAFI.</p>
+                        <p class="hero-sub">Sistem rapor digital terintegrasi SMP-MA DAFI.</p>
                         <i class="fas fa-chart-pie hero-art" aria-hidden="true"></i>
                     </div>
                     <div id="dash-stats" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-5">
@@ -277,6 +273,9 @@
                                 <code>1.NIS</code> | <code>2.Nama</code> | <code>3.UH1</code> | <code>4.UH2</code> | <code>5.UH3</code> | <code>6.UH4</code> | <code>7.UH5</code> | <code>8.STS</code> | <code>9.SAS</code>
                             </div>
                             <div class="flex flex-col md:flex-row items-stretch md:items-center gap-4">
+                                <button type="button" data-action="downloadGradeTemplate" class="btn-secondary whitespace-nowrap">
+                                    <i class="fas fa-download mr-2" aria-hidden="true"></i> Unduh Template
+                                </button>
                                 <input type="file" id="n-file" class="file-input" accept=".xlsx, .xls" aria-label="Pilih file Excel nilai">
                                 <button type="button" data-action="uploadNilai" class="btn-primary whitespace-nowrap"><i class="fas fa-upload mr-2" aria-hidden="true"></i> Preview &amp; Simpan</button>
                             </div>
