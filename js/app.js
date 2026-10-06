@@ -11,6 +11,7 @@
   let pendingSave = false;
   let toastTimer = 0;
   let navSeq = 0;          // guard navigasi async: hasil lambat tak menimpa klik berikutnya
+  let capaianSeq = 0;      // guard muat capaian: respons pilihan lama tak menimpa yang baru
   let activeRaporTab = 'aktif';   // tab rapor yang sedang aktif ('aktif'|'arsip')
   // Username yang sedang wajib reset password. Disimpan di state (Tahap 12):
   // form reset tak lagi punya input username, hanya verifikasi password lama
@@ -277,7 +278,10 @@
       // Auto-load halaman hanya pada interaksi user asli — tanpa guard ini setiap
       // halaman termuat dua kali (dispatch boot + auto-load nav).
       const userGesture = e.isTrusted !== false;
-      if (id === 'c-kelas') updateSubjects(e.target.value, 'c-mapel');
+      // `c-kelas`: ganti daftar mapel SEKALIGUS muat ulang — setOptions mengisi
+      // `c-mapel` secara programatis (tanpa event change), jadi tanpa panggilan
+      // eksplisit di sini teks kelas sebelumnya tertinggal di #c-text.
+      if (id === 'c-kelas') { updateSubjects(e.target.value, 'c-mapel'); if (userGesture) loadCapaian(); }
       if (id === 'n-kelas') { updateSubjects(e.target.value, 'n-mapel'); if (userGesture) checkAndLoadNilai(); }
       if (['n-mapel','n-sem','n-thn'].includes(id) && userGesture) checkAndLoadNilai();
       if (id === 'a-kelas' || id === 'a-sem' || id === 'a-thn') { if (userGesture) loadAbsen(); }
@@ -285,7 +289,7 @@
       // Guard sama seperti halaman lain: preselect boot tidak boleh memicu
       // muat daftar siswa halaman rapor yang belum dibuka (toast error saat login).
       if (id === 'r-kelas' && userGesture) loadSiswa(e.target.value);
-      if (id === 'c-mapel' && userGesture) loadCapaian();
+      if (['c-mapel','c-sem','c-thn'].includes(id) && userGesture) loadCapaian();
       if (id === 'm-kelas' || id === 'm-sem' || id === 'm-thn') { /* explicit button */ }
       if (id === 'ar-kelas' && userGesture) loadArchiveStudents(e.target.value);
       if (id === 'ak-mode') {
@@ -650,6 +654,13 @@
     });
     if (innerWidth < 768) closeSidebar();
     // ---- Halaman yang langsung termuat (Tahap 10): tidak perlu klik "Muat" manual.
+    // Dashboard juga dimuat ulang tiap kunjungan — badge Capaian & persen nilai di
+    // kartu tugas harus langsung mencerminkan simpanan terakhir tanpa refresh
+    // browser penuh (paintApp hanya membaca hasil boot sekali).
+    if (id === 'p-dashboard') {
+      if (USER && (USER.role === 'Guru Mapel' || USER.role === 'Wali Kelas')) loadWorkbench();
+      else loadDash();
+    }
     if (id === 'p-akun' || id === 'p-plotting') loadAccounts();
     if (id === 'p-siswa') { loadSiswaList(); promotionOptions(); }
     if (id === 'p-nilai') { preselectNilai(); checkAndLoadNilai(); }
@@ -852,10 +863,19 @@
 
   // --------------------------------------------------------- Capaian
   async function loadCapaian() {
+    const seq = ++capaianSeq;
     const kode = $('#c-mapel').value, kelas = $('#c-kelas').value;
-    if (!kode || !kelas) return;
-    try { $('#c-text').value = await api('getCapaian', { kode, kelas, semester: $('#c-sem').value, tahunAjaran: $('#c-thn').value }); updateCapaianCount(); }
-    catch (e) { toast(e.message, false); }
+    if (!kode || !kelas) {
+      // Kelas tanpa mapel / pilihan belum lengkap — kosongkan isian supaya
+      // teks kelas sebelumnya tidak tertinggal di area isian.
+      $('#c-text').value = ''; updateCapaianCount(); return;
+    }
+    try {
+      const teks = await api('getCapaian', { kode, kelas, semester: $('#c-sem').value, tahunAjaran: $('#c-thn').value });
+      if (seq !== capaianSeq) return;   // user sudah memilih pilihan lain — buang
+      $('#c-text').value = teks; updateCapaianCount();
+    }
+    catch (e) { if (seq === capaianSeq) toast(e.message, false); }
   }
   function updateCapaianCount() {
     const text = $('#c-text').value.trim(); const words = text ? text.split(/\s+/).length : 0;
@@ -867,7 +887,7 @@
     if (!kode || !kelas) return toast('Pilih kelas dan mata pelajaran.', false);
     if (teks.trim().split(/\s+/).filter(Boolean).length > 25) return toast('Capaian maksimal 25 kata.', false);
     setBusy(button || $('[data-action="saveCapaian"]'), true, 'Menyimpan…');
-    try { await api('saveCapaian', { kode, kelas, teks, semester: $('#c-sem').value, tahunAjaran: $('#c-thn').value }); safeMsg('c-status','Capaian tersimpan.',true); gradeDirty = false; }
+    try { await api('saveCapaian', { kode, kelas, teks, semester: $('#c-sem').value, tahunAjaran: $('#c-thn').value }); safeMsg('c-status','Capaian tersimpan.',true); }
     catch (e) { safeMsg('c-status',e.message,false); }
     finally { setBusy(button || $('[data-action="saveCapaian"]'), false); }
   }
