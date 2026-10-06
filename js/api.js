@@ -22,7 +22,7 @@
   // mengedit source (mis. ditanam oleh GitHub Actions).
   // ---------------------------------------------------------------------------
   var CONFIG = {
-    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbzUjy6Ec4UWMw1-Ljmuhiu6MBdB2TAVmePbLNWj6w77NNp46v1JgVyuH_BOzmR4WED1zA/exec',
+    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbxhDy8sYBSSNfhWz-KIHnzl5AfqDL5_LNQ2jfY81GNsu9TpUOdXRrTfSy-S0hhShZba/exec',
     mode: 'direct' // 'direct' | 'proxy'
   };
 
