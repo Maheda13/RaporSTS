@@ -309,6 +309,11 @@
         const n = e.target.value === '' ? null : Number(e.target.value);
         if (n !== null && (!Number.isFinite(n) || n < 0 || n > 100)) e.target.classList.add('input-invalid');
         updateDirtyIndicator();
+        // Hitung ulang sel Nilai Akhir baris ini dari 5 UH + STS (urutan DOM
+        // sama dengan urutan kolom) — guru langsung melihat tanpa simpan/refresh.
+        const row = e.target.closest('tr[data-nis]');
+        const cell = row && row.querySelector('.akhir-cell');
+        if (cell) cell.textContent = teksAkhir($$('input[type=number]', row).map(i => i.value));
       }
     });
 
@@ -328,7 +333,7 @@
       e.preventDefault();
       const inputs = $$('#n-table-area input[type=number]');
       const index = inputs.indexOf(e.target);
-      const next = index + (e.shiftKey ? -7 : 7); // 7 score columns per student
+      const next = index + (e.shiftKey ? -6 : 6); // 6 input nilai per siswa: UH1–UH5 + STS
       if (inputs[next]) { inputs[next].focus(); inputs[next].select(); }
     });
   }
@@ -607,12 +612,12 @@
   const PAGE_META = {
     'p-dashboard': ['Dashboard', 'Ringkasan kerja dan status hari ini'],
     'p-capaian': ['Input Capaian', 'Deskripsi capaian per kelas, mapel, dan periode aktif'],
-    'p-nilai': ['Input Nilai', 'Nilai ulangan harian, STS, dan SAS — periode aktif'],
-    'p-status': ['Status Nilai', 'Kelengkapan nilai per kelas dan mata pelajaran'],
+    'p-nilai': ['Input Nilai', 'Nilai ulangan harian dan STS, dengan nilai akhir live — periode aktif'],
+    'p-status': ['Status Nilai', 'Kelengkapan nilai per kelas dan mata pelajaran — STS wajib dihitung terisi'],
     'p-absen': ['Absensi', 'Sakit, izin, dan alpha per siswa — periode aktif'],
     'p-ekstra': ['Ekstrakurikuler', 'Nilai kegiatan per siswa — periode aktif'],
     'p-rapor': ['Rapor', 'Pratinjau dan cetak PDF — periode aktif maupun arsip'],
-    'p-monitor': ['Pantau Kelengkapan', 'Leger nilai seluruh siswa per kelas'],
+    'p-monitor': ['Pantau Kelengkapan', 'Leger nilai seluruh siswa per kelas — siswa dihitung terisi jika STS valid'],
     'p-siswa': ['Data Siswa', 'Kelola data siswa, promosi kelas, dan status kelulusan'],
     'p-akun': ['Akun & Reset', 'Reset password, ubah role, dan periode aktif'],
     'p-plotting': ['Penugasan', 'Plotting mata pelajaran per kelas'],
@@ -751,6 +756,13 @@
   async function loadWorkbench() {
     const area = $('#dash-workbench-list');
     if (!area) return;
+    const isWali = USER && USER.role === 'Wali Kelas';
+    const title = $('#dash-workbench-title');
+    const hint = $('#dash-workbench-hint');
+    if (title) title.textContent = isWali ? 'Pantauan Kelas Saya' : 'Tugas Saya';
+    if (hint) hint.textContent = isWali
+      ? 'Progres pengisian nilai pada kelas yang Anda wali · periode berjalan (STS wajib)'
+      : 'Kelas × mata pelajaran yang Anda ampu · periode berjalan';
     area.replaceChildren();
     let d;
     try {
@@ -771,6 +783,9 @@
       empty.textContent = 'Belum ada penugasan mata pelajaran untuk akun ini.';
       area.appendChild(empty); return;
     }
+    // Menu role dipakai dua kali: menentukan baris Capaian dan tombol pintu.
+    const role = (USER && USER.role) || '';
+    const menuIds = (MENUS[role] || []).map(x => x[0]);
     d.tugas.forEach(t => {
       const card = document.createElement('div');
       card.className = 'status-card';
@@ -784,17 +799,23 @@
       const ul = document.createElement('ul');
       const row = document.createElement('li'); row.className = 'status-row';
       const left = document.createElement('span'); left.className = 'name';
-      left.textContent = 'Nilai ' + t.nilai.terisi + '/' + t.nilai.total + ' siswa';
-      const cap = document.createElement('span');
-      cap.className = 'badge ' + (t.capaian ? 'badge-ok' : 'badge-warn');
-      cap.textContent = t.capaian ? 'Capaian ✓' : 'Capaian –';
-      row.append(left, cap);
+      // STS wajib: "terisi" berarti STS sudah diisi — angka yang sama dengan
+      // Status Nilai & Pantau Kelengkapan, jadi kartu dan rekap tak berbeda.
+      left.textContent = 'Nilai ' + t.nilai.terisi + '/' + t.nilai.total + ' siswa (STS terisi)';
+      row.append(left);
+      // Badge Capaian hanya untuk peran yang MENGISI capaian (Guru Mapel).
+      // Wali Kelas tidak punya halaman Input Capaian — menampilkan
+      // "Capaian –" di sana hanya menimbulkan kesan tugas tertunda.
+      if (menuIds.indexOf('p-capaian') >= 0) {
+        const cap = document.createElement('span');
+        cap.className = 'badge ' + (t.capaian ? 'badge-ok' : 'badge-warn');
+        cap.textContent = t.capaian ? 'Capaian ✓' : 'Capaian –';
+        row.append(cap);
+      }
       ul.appendChild(row);
       // Pintu harus menunjuk halaman yang BENAR-BENAR ada di menu role tsb.
       // Menu Wali Kelas sengaja tanpa p-nilai/p-capaian (ia memantau lewat
       // Status Nilai) — memberi pintu ke sana membuat navigasi buntu.
-      const role = (USER && USER.role) || '';
-      const menuIds = (MENUS[role] || []).map(x => x[0]);
       const go = document.createElement('li'); go.className = 'status-row';
       if (menuIds.indexOf('p-nilai') >= 0) {
         const btn = document.createElement('button');
@@ -856,17 +877,37 @@
     const k=$('#n-kelas').value, m=$('#n-mapel').value, s=$('#n-sem').value, t=$('#n-thn').value;
     if(k&&m&&s&&t) loadNilaiTable(k,m,s,t);
   }
+  /**
+   * Nilai akhir yang tampil live di tabel input — rumus Tengah Semester di
+   * `getRaportData_` (code.gs): (4 × avgUH + STS) / 5, dibulatkan sekali.
+   * STS wajib terisi; tanpa STS valid hasilnya kosong meski UH ada.
+   * @param {Array} vals [uh1..uh5, sts] — angka atau '' dari data/API maupun DOM.
+   * @returns {number|null} nilai akhir (null bila STS belum terisi).
+   */
+  function hitungAkhir(vals) {
+    // STS wajib: ''/null/undefined/non-angka → belum ada nilai akhir (null).
+    const raw = vals[5];
+    const sts = Number(raw);
+    const stsValid = raw !== '' && raw != null && Number.isFinite(sts) && sts >= 0 && sts <= 100;
+    if (!stsValid) return null;
+    const uh = vals.slice(0,5).map(Number).filter(n=>Number.isFinite(n)&&n>0);
+    const avg = uh.length ? uh.reduce((a,b)=>a+b,0)/uh.length : 0;
+    return Math.round(avg?(4*avg+sts)/5:sts);
+  }
+  /** Teks tampilan nilai akhir: '-' bila STS belum terisi / belum ada nilai. */
+  function teksAkhir(vals) { const n=hitungAkhir(vals); return n==null?'-':String(n); }
   async function loadNilaiTable(k,m,s,t) {
     const area=$('#n-table-area'); area.innerHTML='<div class="empty-state" role="status" aria-live="polite">Memuat data…</div>';
     try {
       const data=await api('getDataNilaiInput',{kelas:k,kodeMapel:m,semester:s,tahunAjaran:t});
       if(!data || !data.length) { area.innerHTML='<div class="empty-state">Belum ada siswa pada kelas ini.</div>'; return; }
-      let html='<table class="data-table" style="min-width:640px"><thead><tr><th rowspan="2" class="sticky sticky-end">Nama Siswa</th><th colspan="5" class="center">Ulangan Harian</th><th rowspan="2" class="center col-sts">STS</th><th rowspan="2" class="center col-sas">SAS</th></tr><tr><th class="center">1</th><th class="center">2</th><th class="center">3</th><th class="center">4</th><th class="center">5</th></tr></thead><tbody>';
+      let html='<table class="data-table" style="min-width:640px"><thead><tr><th rowspan="2" class="sticky sticky-end">Nama Siswa</th><th colspan="5" class="center">Ulangan Harian</th><th rowspan="2" class="center col-sts">STS</th><th rowspan="2" class="center">Nilai Akhir</th></tr><tr><th class="center">1</th><th class="center">2</th><th class="center">3</th><th class="center">4</th><th class="center">5</th></tr></thead><tbody>';
       data.forEach(r=>{
         html+='<tr data-nis="'+esc(r.nis)+'"><td class="sticky sticky-end" style="white-space:nowrap"><span class="font-semibold">'+esc(r.nama)+'</span><br><span class="text-[10px] text-gray-400 font-normal">'+esc(r.nis)+'</span></td>';
         [1,2,3,4,5].forEach(i=>html+='<td class="center" style="padding:.4rem .3rem"><input type="number" inputmode="decimal" class="grade-input uh'+i+'" value="'+esc(r['uh'+i]??'')+'" data-original-value="'+esc(r['uh'+i]??'')+'" min="0" max="100" step="1" aria-label="UH '+i+' — '+esc(r.nama)+'"></td>');
         html+='<td class="center col-sts" style="padding:.4rem .3rem"><input type="number" inputmode="decimal" class="grade-input sts" value="'+esc(r.sts??'')+'" data-original-value="'+esc(r.sts??'')+'" min="0" max="100" step="1" aria-label="STS — '+esc(r.nama)+'"></td>';
-        html+='<td class="center col-sas" style="padding:.4rem .3rem"><input type="number" inputmode="decimal" class="grade-input sas" value="'+esc(r.sas??'')+'" data-original-value="'+esc(r.sas??'')+'" min="0" max="100" step="1" aria-label="SAS — '+esc(r.nama)+'"></td></tr>';
+        // Sel teks (bukan input) — tak tersentuh navigasi Enter & tak bisa diedit.
+        html+='<td class="center akhir-cell font-semibold" style="padding:.4rem .3rem" aria-label="Nilai akhir — '+esc(r.nama)+'">'+esc(teksAkhir([r.uh1,r.uh2,r.uh3,r.uh4,r.uh5,r.sts]))+'</td></tr>';
       });
       area.innerHTML=html+'</tbody></table>'; gradeDirty=false; updateDirtyIndicator();
     } catch(e) { area.innerHTML='<div class="empty-state bad" role="alert">'+esc(e.message)+'</div>'; }
@@ -879,7 +920,7 @@
   function readGradeRows(filters) {
     return $$('#n-table-area tr[data-nis]').map(row=>{
       const out={nis:row.dataset.nis,kelas:filters.k,kodeMapel:filters.m,sem:filters.s,tahun:filters.t};
-      ['uh1','uh2','uh3','uh4','uh5','sts','sas'].forEach(k=>{
+      ['uh1','uh2','uh3','uh4','uh5','sts'].forEach(k=>{
         const value=row.querySelector('.'+k).value;
         // Untouched blank values are omitted (preserve existing); when user cleared
         // a prior value, the input's data-original-value tells us to send null.
@@ -922,7 +963,9 @@
         const nis=String(row[0]).trim();
         if(!validNis.has(nis)) { problems.push('Baris '+(i+2)+': NIS '+nis+' tidak ada di kelas '+f.k); return; }
         const item={nis,kelas:f.k,kodeMapel:f.m,sem:f.s,tahun:f.t};
-        ['uh1','uh2','uh3','uh4','uh5','sts','sas'].forEach((key,j)=>{
+        // 8 kolom: NIS | Nama | UH1–UH5 | STS. Kolom ke-9 (SAS) TIDAK dibaca lagi —
+        // fokus sementara hanya STS. File lama berkolom SAS tetap aman diunggah.
+        ['uh1','uh2','uh3','uh4','uh5','sts'].forEach((key,j)=>{
           const raw=row[j+2]; if(raw===''||raw===null||raw===undefined) return;
           const n=Number(raw); if(!Number.isFinite(n)||n<0||n>100) problems.push('Baris '+(i+2)+': '+key+' harus 0–100'); else item[key]=n;
         });
@@ -952,7 +995,8 @@
    *
    * Urutan header MENGIKUTI parser uploadNilai() persis (A1 = header, kolom
    * berdasarkan posisi — server tidak membaca judul kolom):
-   *   0 NIS | 1 Nama | 2 UH1 | 3 UH2 | 4 UH3 | 5 UH4 | 6 UH5 | 7 STS | 8 SAS
+   *   0 NIS | 1 Nama | 2 UH1 | 3 UH2 | 4 UH3 | 5 UH4 | 6 UH5 | 7 STS
+   *   (8 kolom; SAS dihapus — parser berhenti membaca kolom ke-9)
    *
    * Baris data hanya NIS + Nama; SEMUA kolom nilai dibiarkan kosong. Nilai kosong
    * dilewati parser (undefined) → simpan mempertahankan nilai lama, jadi template
@@ -965,10 +1009,10 @@
     try {
       const siswa = await api('getSiswaByKelas', { kelas: f.k });
       if (!siswa || !siswa.length) { toast('Belum ada siswa pada kelas ' + f.k + '.', false); return; }
-      const header = ['NIS','Nama','UH1','UH2','UH3','UH4','UH5','STS','SAS'];
+      const header = ['NIS','Nama','UH1','UH2','UH3','UH4','UH5','STS'];
       // NIS ditulis apa adanya (string dari API) → cell teks, Excel tidak
       // mengubahnya ke notasi ilmiah. Kolom nilai = string kosong.
-      const aoa = [header, ...siswa.map(s => [String(s.nis), s.nama, '', '', '', '', '', '', ''])];
+      const aoa = [header, ...siswa.map(s => [String(s.nis), s.nama, '', '', '', '', '', ''])];
       const sheet = XLSX.utils.aoa_to_sheet(aoa);
       const wb = XLSX.utils.book_new();
       // Nama sheet maksimal 31 karakter (batas Excel).
@@ -1297,10 +1341,11 @@
         if (hasSas) cell(tr, v ? score(v.sas) : '-', 'center');
         let akhir = '';
         if (v) {
-          const sts = Number(v.sts) || 0;
-          // Rumus & pembulatan identik dengan getRaportData_ — pakai avg belum
-          // dibulatkan supaya hasil persis sama dengan nilai di rapor.
-          akhir = (avgRaw && sts) ? Math.round((4 * avgRaw + sts) / 5) : (avgRaw || sts || '');
+          const stsRaw = v.sts, sts = Number(stsRaw) || 0;
+          const stsValid = stsRaw !== '' && stsRaw != null && Number.isFinite(Number(stsRaw)) && Number(stsRaw) >= 0 && Number(stsRaw) <= 100;
+          // STS wajib — tanpa STS valid tidak ada nilai akhir, UH tidak dipakai.
+          // Rumus & pembulatan identik dengan getRaportData_ (avg belum dibulatkan).
+          if (stsValid) akhir = avgRaw ? Math.round((4 * avgRaw + sts) / 5) : sts;
         }
         cell(tr, akhir === '' ? '-' : String(akhir), 'center font-semibold');
       });
