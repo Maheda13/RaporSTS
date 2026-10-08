@@ -194,6 +194,14 @@
                             <div id="dash-workbench-list" class="grid grid-cols-1 lg:grid-cols-2 gap-x-5" role="status" aria-live="polite"></div>
                         </div>
                     </div>
+                    <!-- Peringatan nilai wali kelas — muncul hanya bila ada entri (renderWaliAlert) -->
+                    <div id="dash-wali-alert" class="card-shadow hidden mt-5">
+                        <div class="section-head">
+                            <h4>Perhatian Nilai</h4>
+                            <span class="hint" id="dash-wali-alert-hint"></span>
+                        </div>
+                        <div id="dash-wali-alert-list" role="status" aria-live="polite"></div>
+                    </div>
                     <div id="dash-progress" class="hidden mt-5">
                         <div class="card-shadow">
                             <div class="section-head"><h4>Rekap Progres Kelengkapan</h4><span class="hint">Per kelas · per mata pelajaran · per guru</span></div>
