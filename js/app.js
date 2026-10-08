@@ -12,6 +12,7 @@
   let toastTimer = 0;
   let navSeq = 0;          // guard navigasi async: hasil lambat tak menimpa klik berikutnya
   let capaianSeq = 0;      // guard muat capaian: respons pilihan lama tak menimpa yang baru
+  let workbenchSeq = 0;    // guard muat kartu tugas: pemanggil bersaing tak menggandakan kartu
   let activeRaporTab = 'aktif';   // tab rapor yang sedang aktif ('aktif'|'arsip')
   // Username yang sedang wajib reset password. Disimpan di state (Tahap 12):
   // form reset tak lagi punya input username, hanya verifikasi password lama
@@ -493,9 +494,12 @@
     popDrops();
     buildMenu(USER.role);
     if (stats) renderDashStats(stats);
+    // Pemuatan dashboard TIDAK diulang di sini: buildMenu() di atas sudah
+    // memanggil nav('p-dashboard') yang menjalankan loadWorkbench()/loadDash().
+    // Memanggil lagi menghasilkan dua request bersaing → kartu tugas ter-render
+    // dua kali saat login.
     // Statistik bisa saja gagal (bukan error auth) → muat lagi di latar belakang.
     if (!stats) loadDash();
-    if (isTeacher) loadWorkbench();
     // Tahap 11: panen baca murni di latar belakang sesaat setelah shell tampil —
     // BUKAN di depan paint (login sudah menambah 3 request berurutan; menumpuknya
     // di awal hanya memindahkan antrean). Tanpa `await`: tidak menahan siapa pun,
@@ -767,6 +771,7 @@
   async function loadWorkbench() {
     const area = $('#dash-workbench-list');
     if (!area) return;
+    const seq = ++workbenchSeq;   // pemanggil bersaing → hanya yang terakhir merender
     const isWali = USER && USER.role === 'Wali Kelas';
     const title = $('#dash-workbench-title');
     const hint = $('#dash-workbench-hint');
@@ -779,21 +784,27 @@
     try {
       d = await api('getMyWorkbench', {}, { silent: true });
     } catch (e) {
+      if (seq !== workbenchSeq) return;
+      renderWaliAlert(null);
       const err = document.createElement('div'); err.className = 'callout bad';
       err.setAttribute('role', 'alert'); err.textContent = e.message;
       area.appendChild(err); return;
     }
+    if (seq !== workbenchSeq) return;   // request lebih baru sudah mengambil alih area
     if (!d.periode) {
+      renderWaliAlert(null);
       const warn = document.createElement('div'); warn.className = 'callout';
       warn.setAttribute('role', 'status');
       warn.textContent = 'Periode aktif belum ditetapkan Operator/Admin — input nilai, absensi, ekstra, dan capaian belum dapat ditulis.';
       area.appendChild(warn); return;
     }
     if (!d.tugas.length) {
+      renderWaliAlert(d.peringatan);
       const empty = document.createElement('div'); empty.className = 'empty-state';
       empty.textContent = 'Belum ada penugasan mata pelajaran untuk akun ini.';
       area.appendChild(empty); return;
     }
+    renderWaliAlert(d.peringatan);
     // Menu role dipakai dua kali: menentukan baris Capaian dan tombol pintu.
     const role = (USER && USER.role) || '';
     const menuIds = (MENUS[role] || []).map(x => x[0]);
@@ -852,6 +863,47 @@
       area.appendChild(card);
     });
   }
+  function renderWaliAlert(peringatan) {
+    const card = $('#dash-wali-alert'), list = $('#dash-wali-alert-list');
+    if (!card || !list) return;
+    list.replaceChildren();
+    const diBawah = peringatan && Array.isArray(peringatan.diBawah) ? peringatan.diBawah : [];
+    const belumLengkap = peringatan && Array.isArray(peringatan.belumLengkap) ? peringatan.belumLengkap : [];
+    if (!peringatan || (!diBawah.length && !belumLengkap.length)) {
+      card.classList.add('hidden'); return;
+    }
+    card.classList.remove('hidden');
+    const hint = $('#dash-wali-alert-hint');
+    if (hint) hint.textContent = 'Nilai akhir < ' + peringatan.ambang + ' · ' + peringatan.jenisRapor;
+    const addGroup = (title, rows, kind) => {
+      if (!rows.length) return;
+      const group = document.createElement('div');
+      group.className = 'mb-4';
+      const heading = document.createElement('h5');
+      heading.className = 'font-semibold text-sm mb-2';
+      heading.textContent = title + ' (' + rows.length + ')';
+      group.appendChild(heading);
+      const ul = document.createElement('ul');
+      ul.className = 'divide-y divide-gray-100';
+      rows.forEach(item => {
+        const li = document.createElement('li'); li.className = 'status-row';
+        const label = document.createElement('span'); label.className = 'name';
+        const badge = document.createElement('span'); badge.className = 'badge ' + kind;
+        if (kind === 'badge-bad') {
+          label.textContent = item.nama + ' · ' + item.mapel;
+          badge.textContent = String(item.nilai);
+        } else {
+          label.textContent = item.nama + ' · mapel belum lengkap: ' + (Array.isArray(item.mapel) ? item.mapel.join(', ') : '');
+          badge.textContent = 'STS belum terisi';
+        }
+        li.append(label, badge); ul.appendChild(li);
+      });
+      group.appendChild(ul); list.appendChild(group);
+    };
+    addGroup('Nilai di bawah ' + peringatan.ambang + ' (' + peringatan.jenisRapor + ')', diBawah, 'badge-bad');
+    addGroup('Belum lengkap — STS belum terisi', belumLengkap, 'badge-warn');
+  }
+
   /** Pintu langsung dari dashboard: preselect kelas+mapel lalu buka halaman. */
   function openWorkbench(page, kelas, kode) {
     const prefix = page === 'p-nilai' ? 'n' : 'c';
