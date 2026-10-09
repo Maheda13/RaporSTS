@@ -1593,16 +1593,19 @@
       summary.textContent = !data.periode ? 'Periode aktif belum ditetapkan.'
         : data.total ? 'Periode ' + data.periode.semester + ' ' + data.periode.tahunAjaran + ' · ' + data.terisi + '/' + data.total + ' terisi (' + data.persen + '%)'
         : 'Tidak ada pasangan kelas–mapel terdaftar untuk dilacak.';
-      if (!data.items || !data.items.length) return;
+      const belumTerisi = (data.items || []).filter(item => !item.terisi);
+      if (!data.periode) return;
+      if (!belumTerisi.length) {
+        summary.textContent += data.total ? ' · Semua capaian sudah terisi.' : '';
+        return;
+      }
       const row = document.createElement('tr');
-      ['Kelas', 'Kode', 'Mata Pelajaran', 'Status'].forEach(text => { const th = document.createElement('th'); th.textContent = text; row.appendChild(th); });
+      ['Kelas', 'Kode', 'Mata Pelajaran'].forEach(text => { const th = document.createElement('th'); th.textContent = text; row.appendChild(th); });
       head.appendChild(row);
-      data.items.forEach(item => {
+      belumTerisi.forEach(item => {
         const tr = document.createElement('tr');
         [item.kelas, item.kode, item.nama].forEach(text => { const td = document.createElement('td'); td.textContent = text; tr.appendChild(td); });
-        const td = document.createElement('td');
-        const badge = document.createElement('span'); badge.className = 'badge ' + (item.terisi ? 'badge-ok' : 'badge-warn');
-        badge.textContent = item.terisi ? 'Terisi' : 'Belum diisi'; td.appendChild(badge); tr.appendChild(td); body.appendChild(tr);
+        body.appendChild(tr);
       });
     } catch (e) { summary.textContent = e.message; }
   }
