@@ -1593,7 +1593,7 @@
       summary.textContent = !data.periode ? 'Periode aktif belum ditetapkan.'
         : data.total ? 'Periode ' + data.periode.semester + ' ' + data.periode.tahunAjaran + ' · ' + data.terisi + '/' + data.total + ' terisi (' + data.persen + '%)'
         : 'Tidak ada pasangan kelas–mapel terdaftar untuk dilacak.';
-      const belumTerisi = (data.items || []).filter(item => !item.terisi);
+      const belumTerisi = data.items || [];
       if (!data.periode) return;
       if (!belumTerisi.length) {
         summary.textContent += data.total ? ' · Semua capaian sudah terisi.' : '';
