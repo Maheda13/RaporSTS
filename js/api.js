@@ -22,7 +22,7 @@
   // mengedit source (mis. ditanam oleh GitHub Actions).
   // ---------------------------------------------------------------------------
   var CONFIG = {
-    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbzfcvajKKJJ4qAmz6ctI-_9DA1TuBP69loPdH-osIfHxR-6fnme3PVfRBpkdgkrPUmnWA/exec',
+    apiUrl: global.ERAPOR_API_URL || '',
     mode: 'direct' // 'direct' | 'proxy'
   };
 
@@ -52,6 +52,7 @@
   var READ_CACHE_ACTIONS = [
     'getUploadStatus',       // Status Nilai (per role)
     'getProgressSummary',    // rekap progres Admin/Waka
+    'getCapaianTracking',    // tracking Capaian periode aktif Admin/Waka
     'getMonitoringData',     // leger Admin/Waka
     'getAssignmentList'      // metadata akun & penugasan — 1 baca untuk 2 halaman
   ];
@@ -67,7 +68,7 @@
     'validateSession', 'getInitialData', 'getDashboardStats', 'getCapaian',
     'getDataNilaiInput', 'getAbsensiSiswa', 'getSiswaByKelas', 'getUploadStatus',
     'getRaportData', 'getMonitoringData', 'getArchiveNilai', 'getMyWorkbench',
-    'getNilaiEkstra', 'getProgressSummary', 'getSiswaList', 'getAssignmentList'
+    'getNilaiEkstra', 'getProgressSummary', 'getCapaianTracking', 'getSiswaList', 'getAssignmentList'
   ];
   var READ_CACHE_TTL_ = 60000;
   var READ_CACHE_NS_ = 'rCache.1.';

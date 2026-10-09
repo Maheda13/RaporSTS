@@ -539,10 +539,11 @@
       // Akun & Penugasan + Data Siswa — memuat 1 respons untuk 2 halaman.
       if (has('p-akun') || has('p-plotting')) fire('getAssignmentList', {});
       if (has('p-siswa')) fire('getSiswaList', { kelas: ($('#w-kelas')?.value || '') });
-      // Rekap progres + leger — hanya Admin & Waka Kurikulum.
+      // Rekap progres + tracking Capaian + leger — hanya Admin & Waka Kurikulum.
       if (has('p-monitor')) {
         const s = $('#sum-sem')?.value, t = $('#sum-thn')?.value;
         if (s && t) fire('getProgressSummary', { semester: s, tahunAjaran: t });
+        fire('getCapaianTracking', {});
         const mk = $('#m-kelas')?.value, ms = $('#m-sem')?.value, mt = $('#m-thn')?.value;
         if (mk && ms && mt) fire('getMonitoringData', { kelas: mk, semester: ms, tahun: mt });
       }
@@ -676,7 +677,7 @@
       // Tab default sudah diset paintApp per role (Guru Mapel → arsip).
       switchRaporTab(activeRaporTab, true);
     }
-    if (id === 'p-monitor') loadMonitoring();
+    if (id === 'p-monitor') { loadCapaianTracking(); loadMonitoring(); }
   }
   /** Preselect kelas & mapel pertama agar auto-load benar-benar memuat tabel. */
   function preselectNilai() {
@@ -1259,7 +1260,7 @@
       table.append(header,tbody);area.appendChild(table);
       const sign=document.createElement('label');sign.className='sign-check';
       const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id='r-ttd';
-      sign.append(checkbox,document.createTextNode('Tampilkan Tanda Tangan Wali Kelas ('+d.waliKelas+')'));area.appendChild(sign);
+      sign.append(checkbox,document.createTextNode('Gunakan template dengan tanda tangan wali kelas ('+d.waliKelas+')'));area.appendChild(sign);
       const one=document.createElement('button');one.type='button';one.className='btn-primary btn-block';one.dataset.action='doPrint';one.innerHTML='<i class="fas fa-file-pdf mr-2" aria-hidden="true"></i> Buat & Buka PDF Rapor';area.appendChild(one);
       const all=document.createElement('button');all.type='button';all.className='btn-secondary btn-block mt-3';all.dataset.action='bulkPrint';all.innerHTML='<i class="fas fa-copy mr-2" aria-hidden="true"></i> Cetak Semua Rapor Kelas '+esc(d.siswa.kelas)+' (seluruh kelas)';area.appendChild(all);
       area.classList.remove('hidden');
@@ -1277,18 +1278,50 @@
     } catch(e) { toast(e.message,false); }
     finally { setBusy(button||$('[data-action="doPrint"]'),false); }
   }
+  function clearPrintResult(targetId) {
+    const target = document.getElementById(targetId);
+    if (target) target.replaceChildren();
+  }
+  function makeBulkResultLink(result, targetId) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.replaceChildren();
+    const summary = document.createElement('span');
+    summary.textContent = result.generated + ' berhasil, ' + result.failed + ' gagal.';
+    target.appendChild(summary);
+    if (result.url) {
+      const link = document.createElement('a');
+      link.href = result.url; link.target = '_blank'; link.rel = 'noopener';
+      link.className = 'btn-secondary inline-flex mt-2';
+      link.textContent = 'Buka Folder Hasil Cetak';
+      target.appendChild(link);
+    }
+    if (result.errors && result.errors.length) {
+      const details = document.createElement('details');
+      details.className = 'mt-2';
+      const heading = document.createElement('summary');
+      heading.textContent = 'Lihat rincian siswa gagal';
+      const list = document.createElement('ul');
+      result.errors.forEach(error => {
+        const item = document.createElement('li'); item.textContent = error.nis + ': ' + error.message; list.appendChild(item);
+      });
+      details.append(heading, list); target.appendChild(details);
+    }
+  }
   async function bulkPrint(button) {
     const kelas=$('#r-kelas').value,semester=$('#r-sem').value,tahunAjaran=$('#r-thn').value,jenisRapor=$('#r-jenis').value;
     if(!kelas||!semester||!tahunAjaran) return toast('Lengkapi kelas, semester, dan tahun.',false);
+    clearPrintResult('r-print-result');
     const withSignature=$('#r-ttd').checked;
+    clearPrintResult('r-print-result');
     const count=await api('getSiswaByKelas',{kelas}).then(x=>x.length).catch(e=>{toast(e.message,false);return 0;});
     if(!count) return;
     if(!await confirmBar('Akan dibuat '+count+' PDF untuk seluruh kelas '+kelas+' (bukan hanya siswa di preview). Lanjutkan?', 'Cetak Semua')) return;
     setBusy(button||$('[data-action="bulkPrint"]'),true,'Membuat '+count+' PDF…');
     try {
       const result=await api('generateAllPdf',{kelas,semester,tahunAjaran,jenisRapor,withSignature},{timeout:360000});
-      const summary=result.generated+' berhasil, '+result.failed+' gagal.';
-      toast(summary,true); if(result.url) window.open(result.url,'_blank','noopener');
+      makeBulkResultLink(result, 'r-print-result');
+      toast(result.generated+' berhasil, '+result.failed+' gagal.',result.failed===0);
       if(result.errors&&result.errors.length) console.warn('Kesalahan cetak PDF:',result.errors);
     } catch(e) { toast(e.message,false); }
     finally { setBusy(button||$('[data-action="bulkPrint"]'),false); }
@@ -1461,7 +1494,7 @@
       table.append(thead, tbody); area.appendChild(table);
       const sign = document.createElement('label'); sign.className = 'sign-check';
       const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.id = 'ar-ttd';
-      sign.append(checkbox, document.createTextNode('Tampilkan Tanda Tangan Wali Kelas (' + d.waliKelas + ')'));
+      sign.append(checkbox, document.createTextNode('Gunakan template dengan tanda tangan wali kelas (' + d.waliKelas + ')'));
       area.appendChild(sign);
       const one = document.createElement('button'); one.type = 'button'; one.className = 'btn-primary btn-block';
       one.dataset.action = 'archivePrint';
@@ -1499,11 +1532,13 @@
     const jenisRapor = $('#ar-jenis').value;
     if (!kelas || !semester || !tahunAjaran) return safeMsg('ar-print-status', 'Pilih kelas dan periode.', false);
     const withSignature = $('#ar-ttd') ? $('#ar-ttd').checked : false;
+    clearPrintResult('ar-print-result');
     setBusy(button || $('[data-action="archiveBulkPrint"]'), true, 'Membuat PDF...');
     try {
       const result = await api('generateAllPdf', { kelas, semester, tahunAjaran, jenisRapor, withSignature }, { timeout: 360000 });
+      makeBulkResultLink(result, 'ar-print-result');
       safeMsg('ar-print-status', result.generated + ' berhasil, ' + result.failed + ' gagal.', true);
-      if (result.url) window.open(result.url, '_blank', 'noopener');
+      toast(result.generated + ' berhasil, ' + result.failed + ' gagal.', result.failed === 0);
       if (result.errors && result.errors.length) console.warn('Kesalahan cetak PDF:', result.errors);
     } catch (e) { safeMsg('ar-print-status', e.message, false); }
     finally { setBusy(button || $('[data-action="archiveBulkPrint"]'), false); }
@@ -1549,6 +1584,28 @@
   }
 
   // ------------------------------------------------------------ Monitoring
+  async function loadCapaianTracking() {
+    const summary = $('#cap-track-summary'), head = $('#cap-track-head'), body = $('#cap-track-body');
+    if (!summary || !head || !body) return;
+    summary.textContent = 'Memuat status Capaian…'; head.replaceChildren(); body.replaceChildren();
+    try {
+      const data = await api('getCapaianTracking', {});
+      summary.textContent = !data.periode ? 'Periode aktif belum ditetapkan.'
+        : data.total ? 'Periode ' + data.periode.semester + ' ' + data.periode.tahunAjaran + ' · ' + data.terisi + '/' + data.total + ' terisi (' + data.persen + '%)'
+        : 'Tidak ada pasangan kelas–mapel terdaftar untuk dilacak.';
+      if (!data.items || !data.items.length) return;
+      const row = document.createElement('tr');
+      ['Kelas', 'Kode', 'Mata Pelajaran', 'Status'].forEach(text => { const th = document.createElement('th'); th.textContent = text; row.appendChild(th); });
+      head.appendChild(row);
+      data.items.forEach(item => {
+        const tr = document.createElement('tr');
+        [item.kelas, item.kode, item.nama].forEach(text => { const td = document.createElement('td'); td.textContent = text; tr.appendChild(td); });
+        const td = document.createElement('td');
+        const badge = document.createElement('span'); badge.className = 'badge ' + (item.terisi ? 'badge-ok' : 'badge-warn');
+        badge.textContent = item.terisi ? 'Terisi' : 'Belum diisi'; td.appendChild(badge); tr.appendChild(td); body.appendChild(tr);
+      });
+    } catch (e) { summary.textContent = e.message; }
+  }
   async function loadMonitoring(button) {
     const kelas=$('#m-kelas').value,semester=$('#m-sem').value,tahun=$('#m-thn').value;
     if(!kelas||!semester||!tahun) return toast('Pilih kelas, semester, dan tahun.',false);
