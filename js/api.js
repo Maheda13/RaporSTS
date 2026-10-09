@@ -1,13 +1,3 @@
-/**
- * eRapor DAFI — lapisan akses API (GitHub Pages → Apps Script JSON API).
- *
- * Kunci desain (lihat docs-development/tahap-0.md & API.md):
- *  - POST dengan Content-Type text/plain → CORS-safelisted, TIDAK memicu preflight.
- *  - Token dikirim di body envelope, BUKAN header Authorization (juga agar tidak
- *    memicu preflight). Header Authorization sudah terbukti diblokir di uji Tahap 0.
- *  - Loader SELALU dibersihkan lewat try/finally — inilah penyebab "spinner macet
- *    selamanya" pada versi lama (19 panggilan, hanya 2 punya failure handler).
- */
 (function (global) {
   'use strict';
 
@@ -22,7 +12,7 @@
   // mengedit source (mis. ditanam oleh GitHub Actions).
   // ---------------------------------------------------------------------------
   var CONFIG = {
-    apiUrl: global.ERAPOR_API_URL || '',
+    apiUrl: global.ERAPOR_API_URL || 'https://script.google.com/macros/s/AKfycbzJXEXyL0WRf6VHrtn3C0561i5DxYia91Syp6Qx1SdFhha89Tx-O2pBi3YCJfJPRt3tCQ/exec',
     mode: 'direct' // 'direct' | 'proxy'
   };
 
