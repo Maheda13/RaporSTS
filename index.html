@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>404 — Wait! | SMP Islam Terpadu Darul Fikri</title>
+<style>
+  :root{
+    --bg:#edecea;
+    --ink:#2b3d4f;
+    color-scheme: light;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{ height:100%; }
+
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding:32px;
+    overflow:auto;
+  }
+
+  /* Gambar utama dipanggil dari sini */
+  .poster{
+    width:min(1200px, 100%);
+    height:auto;
+    display:block;
+    border-radius:6px;
+    box-shadow:0 18px 50px rgba(43,61,79,.14);
+    background:#f6f5f3;
+  }
+
+  /* Tampilan kalau file PNG belum ada */
+  .fallback{
+    display:none;
+    width:min(1200px,100%);
+    aspect-ratio:16/9;
+    border:3px dashed #b9c0c7;
+    border-radius:6px;
+    background:#f6f5f3;
+    text-align:center;
+    padding:40px 24px;
+    place-content:center;
+    gap:10px;
+  }
+  .fallback h1{
+    margin:0;
+    font-size:clamp(48px,8vw,110px);
+    font-weight:800;
+    letter-spacing:-.04em;
+  }
+  .fallback p{
+    margin:0;
+    font-weight:600;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    font-size:clamp(13px,1.4vw,18px);
+  }
+  .fallback code{
+    display:inline-block;
+    margin-top:8px;
+    padding:6px 12px;
+    background:#e4e2df;
+    border-radius:6px;
+    font-size:14px;
+    letter-spacing:0;
+    text-transform:none;
+  }
+
+  .missing .poster{ display:none; }
+  .missing .fallback{ display:grid; }
+</style>
+</head>
+<body>
+
+  <!-- ========== GAMBAR PNG DIPANGGIL DI SINI ========== -->
+  <img
+    class="poster"
+    src="1.png"
+    alt="404 — Wait! Man Shabara Zhafira: Barang siapa yang bersabar, ia akan beruntung."
+    onerror="document.body.classList.add('missing')"
+  />
+
+  <!-- Placeholder otomatis kalau PNG belum diunggah -->
+  <div class="fallback">
+    <h1>wait!</h1>
+    <p>Man Shabara Zhafira</p>
+    <p>&ldquo;Barang siapa yang bersabar, ia akan beruntung.&rdquo;</p>
+    <code>PNG tidak ditemukan &mdash; pastikan nama file persis: 1.png</code>
+  </div>
+
+</body>
+</html>
